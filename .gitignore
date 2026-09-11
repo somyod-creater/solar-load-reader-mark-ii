@@ -1,0 +1,7 @@
+﻿_tmp_*.xlsx
+*.xlsx
+.agents/
+.claude/
+.vscode/
+.DS_Store
+Thumbs.db
