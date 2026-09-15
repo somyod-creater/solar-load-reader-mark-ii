@@ -299,7 +299,10 @@
                         </div>
                         <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
                         <div style="width: 100%;">
-                            <p style="margin: 0 0 4px 0; font-weight: bold; color: #444; font-size: 12px;">สถานะโหลด (Load Status):</p>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <p style="margin: 0; font-weight: bold; color: #444; font-size: 12px;">สถานะโหลด (Load Status):</p>
+                                <button type="button" onclick="clearLoadData()" style="background: none; border: 1px solid #fca5a5; color: #dc2626; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer;">ล้างข้อมูล</button>
+                            </div>
                             <div id="uploadStatus"
                                 style="font-size: 12px; color: #c62828; background: #fff5f5; padding: 8px 10px; border-radius: 6px; border: 1px solid #ffdbdb;">
                                 ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า

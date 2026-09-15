@@ -2126,6 +2126,50 @@
             saveImportedState(lastUploadedFiles.map(f => f.name));
         }
 
+        // Resets the Load panel back to its pristine (never-uploaded) state: an empty 24-hour
+        // zero profile, same shape as the placeholder `data` object the page boots with.
+        // PVSyst data (if any) is left untouched.
+        function clearLoadData() {
+            rawDataPoints = [];
+            lastUploadedFiles = [];
+            fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
+            fusionLoadIsGrid = false;
+            plantReportData = null;
+            importedNetLoadData = null;
+
+            const zeroHours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
+            data.time_strs = zeroHours;
+            data.overall_mean = zeroHours.map(() => 0);
+            data.months = {};
+            data.box_data = {};
+            data.midday_min = 0;
+
+            times.length = 0;
+            times.push(...data.time_strs);
+            hours.length = 0;
+            hours.push(...times.map(t => timeSlotToHour(t)));
+
+            replotCharts();
+            renderFusionChart();
+            plantReportNeedsRender = true;
+            if (document.getElementById('tab-plant').classList.contains('active')) {
+                try { renderPlantReport(null); } catch (err) { console.error('renderPlantReport() failed', err); }
+            }
+            try {
+                renderImportedNetLoad(null);
+            } catch (err) {
+                emptyImportedNetLoadChart('ยังไม่มีข้อมูลโหลด — กรุณาอัพโหลดไฟล์');
+            }
+
+            const input = document.getElementById('fileInput');
+            if (input) input.value = '';
+            const statusEl = document.getElementById('uploadStatus');
+            if (statusEl) statusEl.innerHTML = '⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า';
+
+            updateDashboard();
+            saveImportedState([]);
+        }
+
 
         function handleFileUpload(files) {
             if (files.length === 0) return;
