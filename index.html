@@ -24,6 +24,14 @@
         <!-- Tab 1: Load & Solar -->
         <div id="tab-load" class="tab-page active">
             <div class="chart-toolbar">
+                <div class="solar-source-toolbar" id="solarSourceToolbar">
+                    <span class="source-toolbar-label">☀️ ข้อมูล Solar บนกราฟ:</span>
+                    <div class="time-segment" id="solarSourceSegment">
+                        <button type="button" id="btnSourceFormula" class="active" onclick="setSolarSource('formula')">⚙️ สูตรคำนวณ</button>
+                        <button type="button" id="btnSourcePVSyst" onclick="setSolarSource('pvsyst')">☀️ จำลอง PVSyst (E_Grid)</button>
+                        <button type="button" id="btnSourceCompare" onclick="setSolarSource('compare')">🔀 เปรียบเทียบ</button>
+                    </div>
+                </div>
                 <div class="time-segment" id="netLoadTimeSegment">
                     <button type="button" class="active" data-period="daily"
                         onclick="setNetLoadPeriod('daily')">Daily</button>
@@ -276,26 +284,63 @@
         <!-- Tab 2: Finance -->
         <div id="tab-finance" class="tab-page">
 
-            <!-- Excel Upload Panel -->
-            <div class="panel" style="border-top-color: #28a745; margin-bottom: 20px; width: 100%; max-width: 1020px;">
-                <h4>📥 อัพโหลดข้อมูลโหลด (Upload Load Profile Excel)</h4>
-                <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                    <div id="dropzone"
-                        style="flex: 1; min-width: 300px; border: 2px dashed #007bff; border-radius: 8px; padding: 20px; text-align: center; background: #f8f9fa; cursor: pointer; transition: 0.3s;">
-                        <span style="font-size: 32px;">📁</span>
-                        <p style="margin: 8px 0 4px 0; font-weight: bold; color: #333;">ลากไฟล์ Excel (.xlsx)
-                            มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
-                        <p style="margin: 0; font-size: 11px; color: #666;">รองรับไฟล์รายงานโหลดรายชั่วโมง (เช่นของ
-                            Ampas) หรือ 15 นาที (อัพโหลดทีละหลายไฟล์เพื่อTotalข้อมูลได้)</p>
-                        <input type="file" id="fileInput" multiple accept=".xlsx" style="display: none;">
+            <!-- Upload Panels Row -->
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; width: 100%; max-width: 1040px;">
+                <!-- Excel Load Upload Panel -->
+                <div class="panel" style="flex: 1; min-width: 320px; border-top-color: #28a745; margin-bottom: 0;">
+                    <h4>📥 อัพโหลดข้อมูลโหลด (Upload Load Profile Excel)</h4>
+                    <div style="display: flex; gap: 15px; align-items: flex-start; flex-direction: column;">
+                        <div id="dropzone"
+                            style="width: 100%; box-sizing: border-box; border: 2px dashed #007bff; border-radius: 8px; padding: 18px; text-align: center; background: #f8f9fa; cursor: pointer; transition: 0.3s;">
+                            <span style="font-size: 30px;">📁</span>
+                            <p style="margin: 6px 0 3px 0; font-weight: bold; color: #333; font-size: 13px;">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
+                            <p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">รายงานโหลดรายชั่วโมง หรือ 15 นาที (อัพโหลดทีละหลายไฟล์ได้)</p>
+                            <button type="button" class="btn-browse-file" style="padding: 7px 16px; font-size: 12px; font-weight: 600; border-radius: 6px; background: #0284c7; color: #ffffff; border: none; cursor: pointer;" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
+                        </div>
+                        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
+                        <div style="width: 100%;">
+                            <p style="margin: 0 0 4px 0; font-weight: bold; color: #444; font-size: 12px;">สถานะโหลด (Load Status):</p>
+                            <div id="uploadStatus"
+                                style="font-size: 12px; color: #c62828; background: #fff5f5; padding: 8px 10px; border-radius: 6px; border: 1px solid #ffdbdb;">
+                                ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
+                            </div>
+                        </div>
                     </div>
-                    <div style="flex: 1; min-width: 300px; padding: 5px;">
-                        <p style="margin: 0 0 8px 0; font-weight: bold; color: #444;">สถานะการอัพโหลด (Upload Status):
-                        </p>
-                        <div id="uploadStatus"
-                            style="font-size: 13px; color: #c62828; background: #fff5f5; padding: 10px; border-radius: 6px; min-height: 50px; border: 1px solid #ffdbdb;">
-                            ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel
-                            เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
+                </div>
+
+                <!-- PVSyst Solar Simulation Upload Panel -->
+                <div class="panel" style="flex: 1; min-width: 320px; border-top-color: #f59e0b; margin-bottom: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <h4 style="margin: 0; border: none; padding: 0;">☀️ นำเข้าผลจำลอง PVSyst (E_Grid)</h4>
+                        <span id="pvsystSourceBadge" style="display:none; font-size:11px; padding:2px 8px; border-radius:12px; background:#dcfce7; color:#15803d; font-weight:600;">Active</span>
+                    </div>
+                    <div style="display: flex; gap: 15px; align-items: flex-start; flex-direction: column;">
+                        <div id="pvsystDropzone"
+                            style="width: 100%; box-sizing: border-box; border: 2px dashed #f59e0b; border-radius: 8px; padding: 18px; text-align: center; background: #fffdfa; cursor: pointer; transition: 0.3s;">
+                            <span style="font-size: 30px;">☀️</span>
+                            <p style="margin: 6px 0 3px 0; font-weight: bold; color: #92400e; font-size: 13px;">ลากไฟล์ PVSyst (.csv / .txt / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p style="margin: 0 0 10px 0; font-size: 11px; color: #78350f;">ดึงข้อมูลการผลิต <b>E_Grid (kW)</b> รายชั่วโมงจาก Simulation จริง</p>
+                            <button type="button" class="btn-browse-file" style="padding: 7px 16px; font-size: 12px; font-weight: 600; border-radius: 6px; background: #d97706; color: #ffffff; border: none; cursor: pointer;" onclick="document.getElementById('pvsystFileInput').click();">☀️ คลิกเลือกไฟล์ PVSyst</button>
+                        </div>
+                        <input type="file" id="pvsystFileInput" accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <div style="width: 100%;">
+                            <div id="pvsystStatus"
+                                style="font-size: 12px; color: #854d0e; background: #fef9c3; padding: 8px 10px; border-radius: 6px; border: 1px solid #fef08a;">
+                                ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้สูตรคำนวณมาตรฐาน kWp × PSH)
+                            </div>
+                            <div id="pvsystInfoBox" style="display: none; margin-top: 8px; font-size: 12px; background: #ffffff; border: 1px solid #fed7aa; border-radius: 6px; padding: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <strong style="color: #9a3412;">ข้อมูล PVSyst Simulation:</strong>
+                                    <button type="button" onclick="clearPVSystData()" style="background: none; border: 1px solid #fca5a5; color: #dc2626; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer;">ล้างข้อมูล</button>
+                                </div>
+                                <div id="pvsystMetaTags" style="margin-bottom: 6px;"></div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; color: #334155;">
+                                    <div>⚡ Peak E_Grid: <b id="pvsystPeakKw" style="color: #ea580c;">-</b> kW</div>
+                                    <div>🔋 Annual Total: <b id="pvsystAnnualMwh" style="color: #059669;">-</b> MWh</div>
+                                    <div>📅 Data Hours: <b id="pvsystTotalHours">-</b> ชม.</div>
+                                    <div>🌤️ Avg Daily: <b id="pvsystAvgDaily">-</b> kWh/วัน</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -305,6 +350,14 @@
                 <!-- System & Financial -->
                 <div class="panel" style="max-width: 500px;">
                     <h4>⚙️ System Sizing & Cost</h4>
+                    <div class="control-group" id="solarSourceControlGroup" style="display:none; background:#fff7ed; padding:8px 10px; border-radius:6px; border:1px solid #fed7aa; margin-bottom:10px;">
+                        <label style="font-size:12px; color:#9a3412; font-weight:600;">แหล่งข้อมูล Solar บนกราฟ & คำนวณ:</label>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                            <button type="button" id="btnUseFormula" class="source-toggle-btn active" onclick="setSolarSource('formula')">⚙️ สูตรคำนวณ</button>
+                            <button type="button" id="btnUsePVSyst" class="source-toggle-btn" onclick="setSolarSource('pvsyst')">☀️ จำลอง PVSyst (E_Grid)</button>
+                            <button type="button" id="btnUseCompare" class="source-toggle-btn" onclick="setSolarSource('compare')">🔀 เปรียบเทียบ</button>
+                        </div>
+                    </div>
                     <div class="control-group">
                         <label>Inverter Type:</label>
                         <select id="inverterType" onchange="toggleInverterType()">
