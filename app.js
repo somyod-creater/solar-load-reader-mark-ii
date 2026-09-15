@@ -6,6 +6,7 @@
         var importedNetLoadData = null;
         var importedPVSystData = null;
         var activeSolarSource = 'formula'; // 'formula' | 'pvsyst' | 'compare'
+        var monthsAreSolar = false; // true when data.months holds PVSyst per-month curves instead of real per-month load averages
         var compareTraceIndex = -1;
         var lastUploadedFiles = [];
         var isBatchImporting = false;
@@ -1230,7 +1231,6 @@
 
             data.time_strs = time_strs;
             data.overall_mean = time_strs.map(() => 0);
-            data.months = {};
             data.box_data = {};
             data.midday_min = 0;
 
@@ -1238,6 +1238,22 @@
             times.push(...time_strs);
             hours.length = 0;
             hours.push(...times.map(t => timeSlotToHour(t)));
+
+            // Per-month PVSyst comparison traces (mirrors the "Avg Load - <month>" lines real load
+            // data gets), so a full year of simulated production can be compared month-to-month too.
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            if (importedPVSystData && importedPVSystData.monthlyHourlyProfiles) {
+                monthsAreSolar = true;
+                const monthsObj = {};
+                importedPVSystData.monthlyHourlyProfiles.forEach((profile24, idx) => {
+                    if (!profile24.some(v => v > 0)) return; // skip months with no data
+                    monthsObj[monthNames[idx]] = hours.map(h => profile24[Math.floor(h) % 24] || 0);
+                });
+                data.months = monthsObj;
+            } else {
+                monthsAreSolar = false;
+                data.months = {};
+            }
 
             replotCharts();
             updateDashboard();
@@ -1466,7 +1482,7 @@
         const traces = [];
         traces.push({ x: times, y: data.overall_mean, mode: 'lines', name: '<b>Overall Avg Load</b>', line: { shape: 'spline', color: 'black', width: 4 } });
         Object.keys(data.months).forEach(m => {
-            traces.push({ x: times, y: data.months[m], mode: 'lines', name: `Avg Load - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
+            traces.push({ x: times, y: data.months[m], mode: 'lines', name: `${monthsAreSolar ? 'Solar' : 'Avg Load'} - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
         });
         traces.push({ x: times, y: Array(times.length).fill(data.midday_min), mode: 'lines', name: `Base Size (${data.midday_min.toFixed(1)} kW)`, line: { shape: 'spline', color: 'green', width: 2, dash: 'dash' } });
 
@@ -1908,6 +1924,8 @@
 
             const hourSums = new Array(24).fill(0);
             const hourCounts = new Array(24).fill(0);
+            const monthHourSums = Array.from({ length: 12 }, () => new Array(24).fill(0));
+            const monthHourCounts = Array.from({ length: 12 }, () => new Array(24).fill(0));
 
             const monthlyData = Array.from({ length: 12 }, () => ({
                 eGridKwh: 0,
@@ -1968,6 +1986,10 @@
                         monthlyData[monthIdx].prDaylightSum += pr;
                         monthlyData[monthIdx].prDaylightCount++;
                     }
+                    if (h >= 0 && h < 24) {
+                        monthHourSums[monthIdx][h] += eGridKw;
+                        monthHourCounts[monthIdx][h]++;
+                    }
                 }
 
                 hourlyData.push({
@@ -1983,6 +2005,10 @@
             if (hourlyData.length === 0) return null;
 
             const hourlyMeanProfile = hourSums.map((sum, h) => hourCounts[h] > 0 ? (sum / hourCounts[h]) : 0);
+            // Per-month version of hourlyMeanProfile, for the "Solar - Jan"/"Solar - Feb"/... comparison
+            // traces on chart1 (same idea as the per-month "Avg Load" traces real load data gets).
+            const monthlyHourlyProfiles = monthHourSums.map((sums, mi) =>
+                sums.map((sum, h) => monthHourCounts[mi][h] > 0 ? (sum / monthHourCounts[mi][h]) : 0));
             const avgDailyKwh = totalEnergyKwh / (hourlyData.length / 24);
 
             const monthlySummary = monthlyData.map((m, idx) => {
@@ -2002,6 +2028,7 @@
                 annualTotalMWh: parseFloat((totalEnergyKwh / 1000).toFixed(2)),
                 avgDailyKwh: parseFloat(avgDailyKwh.toFixed(2)),
                 hourlyMeanProfile,
+                monthlyHourlyProfiles,
                 monthlySummary,
                 hourlyData
             };
@@ -2026,7 +2053,14 @@
                     activeSolarSource = 'pvsyst';
 
                     updatePVSystUI();
-                    updateDashboard();
+                    if (!rawDataPoints || rawDataPoints.length === 0) {
+                        // No real load uploaded - rebuild chart1's axis now so the per-month PVSyst
+                        // comparison traces show up immediately, not only after the period toggle
+                        // is clicked once.
+                        rebuildEmptyLoadProfileForPeriod(netLoadPeriod);
+                    } else {
+                        updateDashboard();
+                    }
                     saveImportedState(lastUploadedFiles.map(f => f.name));
                 } catch (err) {
                     console.error('Error parsing PVSyst file', err);
@@ -2160,6 +2194,12 @@
             const input = document.getElementById('pvsystFileInput');
             if (input) input.value = '';
             updatePVSystUI();
+            if (monthsAreSolar) {
+                // The per-month traces on chart1 were built from the PVSyst data we just cleared.
+                monthsAreSolar = false;
+                data.months = {};
+                replotCharts();
+            }
             updateDashboard();
             saveImportedState(lastUploadedFiles.map(f => f.name));
         }
@@ -2175,19 +2215,9 @@
             plantReportData = null;
             importedNetLoadData = null;
 
-            const zeroHours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
-            data.time_strs = zeroHours;
-            data.overall_mean = zeroHours.map(() => 0);
-            data.months = {};
-            data.box_data = {};
-            data.midday_min = 0;
-
-            times.length = 0;
-            times.push(...data.time_strs);
-            hours.length = 0;
-            hours.push(...times.map(t => timeSlotToHour(t)));
-
-            replotCharts();
+            // Rebuilds times/hours/data.months for the current period (also repopulates the
+            // PVSyst per-month traces if PVSyst is still active) and re-renders chart1.
+            rebuildEmptyLoadProfileForPeriod(netLoadPeriod);
             renderFusionChart();
             plantReportNeedsRender = true;
             if (document.getElementById('tab-plant').classList.contains('active')) {
@@ -2204,7 +2234,6 @@
             const statusEl = document.getElementById('uploadStatus');
             if (statusEl) statusEl.innerHTML = '⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า';
 
-            updateDashboard();
             saveImportedState([]);
         }
 
@@ -2627,6 +2656,7 @@
             const midday_min = validMidday.length > 0 ? Math.min(...validMidday) : 0;
 
             // Overwrite page data variables
+            monthsAreSolar = false;
             data.time_strs = time_strs;
             data.overall_mean = overall_mean;
             data.months = months_data;
@@ -3072,7 +3102,7 @@
             const traces1 = [];
             traces1.push({ x: times, y: data.overall_mean, mode: 'lines', name: '<b>Overall Avg Load</b>', line: { shape: 'spline', color: 'black', width: 4 } });
             Object.keys(data.months).forEach(m => {
-                traces1.push({ x: times, y: data.months[m], mode: 'lines', name: `Avg Load - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
+                traces1.push({ x: times, y: data.months[m], mode: 'lines', name: `${monthsAreSolar ? 'Solar' : 'Avg Load'} - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
             });
             traces1.push({ x: times, y: Array(times.length).fill(data.midday_min), mode: 'lines', name: `Base Size (${data.midday_min.toFixed(1)} kW)`, line: { shape: 'spline', color: 'green', width: 2, dash: 'dash' } });
 
