@@ -1199,10 +1199,48 @@
             updateNetLoadPeriodButtons();
             if (rawDataPoints && rawDataPoints.length > 0) {
                 processDataPoints(rawDataPoints, lastUploadedFiles || []);
+            } else if (importedPVSystData) {
+                // No load uploaded, but PVSyst is driving chart1 - rebuild ITS time axis for the
+                // selected period too, otherwise Daily/Weekly/Monthly does nothing when the panel
+                // has no load data at all.
+                rebuildEmptyLoadProfileForPeriod(period);
+                if (lastNetLoadRenderData) renderImportedNetLoad(lastNetLoadRenderData);
             } else if (lastNetLoadRenderData) {
                 renderImportedNetLoad(lastNetLoadRenderData);
             }
             renderFusionChart();
+        }
+
+        // Chart1's x-axis (times/hours) only gets rebuilt by processDataPoints(), which requires
+        // real load rows. When there is no load but PVSyst data is selected, rebuild the same
+        // empty-load time axis shape ourselves so the period toggle still updates the PVSyst
+        // curve's x-axis (weekly = 7x24 slots repeating the same daily profile; monthly behaves
+        // like daily here, matching how processDataPoints treats it for real load data too).
+        function rebuildEmptyLoadProfileForPeriod(period) {
+            let time_strs;
+            if (period === 'weekly') {
+                const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                time_strs = [];
+                labels.forEach(day => {
+                    for (let h = 0; h < 24; h++) time_strs.push(day + ' ' + String(h).padStart(2, '0') + ':00');
+                });
+            } else {
+                time_strs = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
+            }
+
+            data.time_strs = time_strs;
+            data.overall_mean = time_strs.map(() => 0);
+            data.months = {};
+            data.box_data = {};
+            data.midday_min = 0;
+
+            times.length = 0;
+            times.push(...time_strs);
+            hours.length = 0;
+            hours.push(...times.map(t => timeSlotToHour(t)));
+
+            replotCharts();
+            updateDashboard();
         }
 
         function startOfWeek(date) {
