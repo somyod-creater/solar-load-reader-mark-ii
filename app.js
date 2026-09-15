@@ -4,6 +4,9 @@
         var fusionLoadIsGrid = false; // true when the imported load = Grid power (FusionSolar / already-solar site)
         var plantReportData = null;
         var importedNetLoadData = null;
+        var importedPVSystData = null;
+        var activeSolarSource = 'formula'; // 'formula' | 'pvsyst' | 'compare'
+        var compareTraceIndex = -1;
         var lastUploadedFiles = [];
         var isBatchImporting = false;
         var plantReportNeedsRender = false;
@@ -423,14 +426,48 @@
             // "kWh/Day" label and ×365 annual projection stays correct in every view.
             const daysInProfile = netLoadPeriod === 'weekly' ? 7 : (netLoadPeriod === 'monthly' ? 30 : 1);
 
+            const isUsingPVSyst = (activeSolarSource === 'pvsyst' && importedPVSystData);
+            const isComparing = (activeSolarSource === 'compare' && importedPVSystData);
+
+            // 1. Formula calculation (ideal sine wave)
             const peakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
-            const solar_dc_curve = hours.map(h => {
+            const formula_dc_curve = hours.map(h => {
                 if (h < SOLAR_SUNRISE || h >= SOLAR_SUNSET) return 0;
                 return kwp * peakFactor * Math.sin(Math.PI * (h - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
             });
+            const formula_curve = formula_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
+
+            // 2. PVSyst hourly simulation profile (if imported)
+            let pvsyst_dc_curve = null;
+            let pvsyst_curve = null;
+            if (importedPVSystData) {
+                if (hours.length === 24) {
+                    pvsyst_dc_curve = importedPVSystData.hourlyMeanProfile.slice();
+                } else {
+                    pvsyst_dc_curve = hours.map(h => {
+                        const hFloor = Math.floor(h) % 24;
+                        const hNext = (hFloor + 1) % 24;
+                        const frac = h - Math.floor(h);
+                        return importedPVSystData.hourlyMeanProfile[hFloor] * (1 - frac) + importedPVSystData.hourlyMeanProfile[hNext] * frac;
+                    });
+                }
+                pvsyst_curve = pvsyst_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
+            }
+
+            // 3. Select active curve for simulation and financial calculations
+            let solar_dc_curve;
+            let total_solar_kwh_day;
+
+            if ((isUsingPVSyst || isComparing) && pvsyst_dc_curve) {
+                solar_dc_curve = pvsyst_dc_curve;
+                total_solar_kwh_day = importedPVSystData.avgDailyKwh;
+            } else {
+                solar_dc_curve = formula_dc_curve;
+                total_solar_kwh_day = kwp * PSH;
+            }
+
             const solar_curve = solar_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
             const load_curve = data.overall_mean;
-            const total_solar_kwh_day = kwp * PSH;
 
             const tariffVal = document.getElementById('tariffProfile').value;
             const tariffData = PEA_TARIFF_DATA[tariffVal];
@@ -477,7 +514,7 @@
             const curtailed_bat = batResult.curtailed / daysInProfile;
             const direct_consumed_day = batResult.direct_consumed / daysInProfile;
 
-            const prod_year = total_solar_kwh_day * 365;
+            const prod_year = isUsingPVSyst ? (importedPVSystData.annualTotalMWh * 1000) : (total_solar_kwh_day * 365);
 
             // --- Financials: Solar Only ---
             const useful_year_no_bat = self_consumed_no_bat * 365;
@@ -597,7 +634,57 @@
             const peakIdxBess = bess_charge_curve.indexOf(maxBessCharge);
             const peakTimeBess = times[peakIdxBess];
 
-            Plotly.restyle('chart1', { 'y': [solar_curve], 'name': [`<b>Solar Gen (${kwp} kWp)</b>`] }, [solarTraceIndex]);
+            const showDesignedSolar = isUsingPVSyst || (kwp > 0);
+
+            // Chart 1 restyle based on activeSolarSource: 'formula' | 'pvsyst' | 'compare'
+            if (activeSolarSource === 'compare' && importedPVSystData && pvsyst_curve) {
+                // Primary trace: PVSyst simulation
+                Plotly.restyle('chart1', {
+                    'y': [pvsyst_curve],
+                    'name': [`<b>☀️ PVSyst E_Grid (${importedPVSystData.peakPowerKw} kW peak)</b>`],
+                    'line': [{ shape: 'spline', color: '#f59e0b', width: 3, dash: 'solid' }],
+                    'fill': ['tozeroy'],
+                    'fillcolor': ['rgba(245, 158, 11, 0.20)'],
+                    'visible': [showDesignedSolar]
+                }, [solarTraceIndex]);
+
+                // Secondary comparison trace: Formula sine wave
+                if (compareTraceIndex !== undefined && compareTraceIndex >= 0) {
+                    Plotly.restyle('chart1', {
+                        'y': [formula_curve],
+                        'name': [`<b>⚙️ Formula (${kwp} kWp, PSH ${PSH})</b>`],
+                        'line': [{ shape: 'spline', color: '#8b5cf6', width: 2.5, dash: 'dash' }],
+                        'fill': ['none'],
+                        'visible': [showDesignedSolar]
+                    }, [compareTraceIndex]);
+                }
+            } else if (activeSolarSource === 'pvsyst' && importedPVSystData && pvsyst_curve) {
+                Plotly.restyle('chart1', {
+                    'y': [solar_curve],
+                    'name': [`<b>☀️ Solar Gen (PVSyst E_Grid - Peak ${importedPVSystData.peakPowerKw} kW)</b>`],
+                    'line': [{ shape: 'spline', color: '#f59e0b', width: 3, dash: 'solid' }],
+                    'fill': ['tozeroy'],
+                    'fillcolor': ['rgba(245, 158, 11, 0.25)'],
+                    'visible': [showDesignedSolar]
+                }, [solarTraceIndex]);
+
+                if (compareTraceIndex !== undefined && compareTraceIndex >= 0) {
+                    Plotly.restyle('chart1', { visible: [false] }, [compareTraceIndex]);
+                }
+            } else {
+                Plotly.restyle('chart1', {
+                    'y': [solar_curve],
+                    'name': [`<b>⚙️ Solar Gen (${kwp} kWp)</b>`],
+                    'line': [{ shape: 'spline', color: '#4fc3f7', width: 3, dash: 'dot' }],
+                    'fill': ['tozeroy'],
+                    'fillcolor': ['rgba(79, 195, 247, 0.25)'],
+                    'visible': [showDesignedSolar]
+                }, [solarTraceIndex]);
+
+                if (compareTraceIndex !== undefined && compareTraceIndex >= 0) {
+                    Plotly.restyle('chart1', { visible: [false] }, [compareTraceIndex]);
+                }
+            }
 
             // When the imported load is Grid power (already-solar site), relabel the black line and
             // caption so it's clear this is net grid demand, not gross consumption.
@@ -605,18 +692,35 @@
             Plotly.restyle('chart1', { name: [loadTraceName] }, [0]);
             const c1cap = document.getElementById('chart1Caption');
             if (c1cap) {
-                c1cap.innerHTML = fusionLoadIsGrid
-                    ? '💡 <b>How to read this chart:</b> The black line is the <b>Grid Power (net load after existing solar)</b> — what the grid actually supplies each hour, i.e. Consumption − existing Solar. This is the demand a battery / additional solar would work against. Gross Consumption and existing Solar are shown separately in the FusionSolar chart below.'
-                    : '💡 <b>How to read this chart:</b> The black line represents the <b>actual power consumed by the factory</b> each hour, and the blue shaded area shows the <b>solar energy potential</b>. Solar production peaks at noon and drops to zero at night. If the blue area exceeds the black line, it indicates surplus generation.';
+                let sourceDesc = '';
+                if (activeSolarSource === 'pvsyst' && importedPVSystData) {
+                    sourceDesc = `<b style="color:#d97706;">☀️ แหล่งข้อมูล Solar: ข้อมูลจำลองจริง PVSyst (E_Grid)</b> · กำลังผลิตสูงสุด ${importedPVSystData.peakPowerKw.toLocaleString()} kW · ผลิตรวม ${importedPVSystData.annualTotalMWh.toLocaleString()} MWh/ปี (เฉลี่ย ${importedPVSystData.avgDailyKwh.toLocaleString()} kWh/วัน)`;
+                } else if (activeSolarSource === 'compare' && importedPVSystData) {
+                    sourceDesc = `<b style="color:#7c3aed;">🔀 โหมดเปรียบเทียบ:</b> เส้นทึบสีส้ม = <b style="color:#d97706;">PVSyst Simulation E_Grid</b> (${importedPVSystData.peakPowerKw.toLocaleString()} kW peak) เทียบกับ เส้นประสีม่วง = <b style="color:#7c3aed;">สูตรคำนวณ Sine Wave</b> (${kwp} kWp, PSH ${PSH})`;
+                } else {
+                    sourceDesc = `<b style="color:#0284c7;">⚙️ แหล่งข้อมูล Solar: สูตรคำนวณมาตรฐาน (kWp × PSH)</b> · ขนาดติดตั้ง ${kwp} kWp · PSH ${PSH} ชม./วัน`;
+                }
+                const loadDesc = fusionLoadIsGrid
+                    ? 'เส้นสีดำคือ <b>Grid Power (โหลดสุทธิ)</b> ที่โรงงานดึงจากระบบจำหน่ายไฟฟ้า'
+                    : 'เส้นสีดำแสดง <b>กำลังไฟฟ้าที่โรงงานใช้งาน (Load)</b> แต่ละชั่วโมง';
+                c1cap.innerHTML = `💡 ${sourceDesc}<br>${loadDesc} และพื้นที่ใต้กราฟสีแสดงศักยภาพการผลิตไฟฟ้าของโซลาร์เซลล์ หากพื้นที่สีสูงกว่าเส้นสีดำหมายถึงมีพลังงานเหลือ (Surplus)`;
             }
 
             // Chart 1 data labels: peak load & peak solar
-            Plotly.relayout('chart1', {
-                annotations: [
-                    peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35),
-                    ...(kwp > 0 ? [peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35)] : [])
-                ]
-            });
+            const chart1Anns = [
+                peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35)
+            ];
+            if (showDesignedSolar) {
+                if (activeSolarSource === 'compare' && importedPVSystData && pvsyst_curve) {
+                    chart1Anns.push(peakAnn(times, pvsyst_curve, 'Peak PVSyst', '#d97706', -35));
+                    chart1Anns.push(peakAnn(times, formula_curve, 'Peak Formula', '#7c3aed', -55));
+                } else if (activeSolarSource === 'pvsyst' && importedPVSystData) {
+                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak PVSyst', '#d97706', -35));
+                } else if (kwp > 0) {
+                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35));
+                }
+            }
+            Plotly.relayout('chart1', { annotations: chart1Anns });
 
             // Update Chart 3 (Solar Only)
             Plotly.restyle('chart3', { 'y': [load_curve] }, [0]);
@@ -647,9 +751,9 @@
             // battery to an existing plant and charging it from the grid), hide the *designed* solar
             // curves so charts 1/3/4 show only load + battery operation. The real historical solar
             // data in chart-fusion is untouched; the BESS simulation still runs (grid-charged).
-            const showDesignedSolar = kwp > 0;
             Plotly.restyle('chart1', { visible: showDesignedSolar }, [solarTraceIndex]);
             Plotly.restyle('chart3', { visible: showDesignedSolar }, [1, 2]);
+
             Plotly.restyle('chart4', { visible: showDesignedSolar }, [1, 2, 3]);
 
             // Chart 6 data labels: when & how much the battery charges / discharges
@@ -738,7 +842,7 @@
                         bgcolor: 'rgba(255,235,235,0.95)', bordercolor: '#e53935', borderwidth: 1, font: { size: 11, color: '#c62828' }
                     }] : []),
                     // ☀️ zone: solar directly serving load (midday) — sit low inside the blue solar area
-                    ...(kwp > 0 ? [regionLabel(iMid, Math.max(20, load_curve[iMid] * 0.4), `☀️ Direct Solar<br><b>${direct_consumed_day.toFixed(0)} kWh/Day</b><br><b>${direct_solar_pct.toFixed(1)}%</b> of generated solar`, '#0277bd', 'rgba(179,229,252,0.9)')] : []),
+                    ...(showDesignedSolar ? [regionLabel(iMid, Math.max(20, load_curve[iMid] * 0.4), `☀️ Direct Solar<br><b>${direct_consumed_day.toFixed(0)} kWh/Day</b><br><b>${direct_solar_pct.toFixed(1)}%</b> of generated solar`, '#0277bd', 'rgba(179,229,252,0.9)')] : []),
                     // 🔋 zone: battery discharging (evening) — energy delivered, hours, and depth of discharge
                     ...(maxDisch4 > 0.1 ? [{
                         x: times[iDisch4], y: midBand(iDisch4), xref: 'x', yref: 'y',
@@ -782,17 +886,33 @@
             if (!tbody) return;
             tbody.innerHTML = '';
 
+            const isUsingPVSyst = (activeSolarSource === 'pvsyst' && importedPVSystData);
             let totalGlobInc = 0;
+            let totalEArrayMWh = 0;
             let totalEGridMWh = 0;
+            let prSum = 0;
+            let prCount = 0;
 
             for (let i = 0; i < 12; i++) {
-                const globIncKWh = PSH * 30; // Just an approximation for display
-                const tAmbAvg = 30.0;
-                const eArrayMWh = (kwp * PSH * 30) / 1000;
-                const eGridMWh = eArrayMWh; // no PR or clipping in simple mode
-                const pr = 1.0;
+                let globIncKWh, tAmbAvg, eArrayMWh, eGridMWh, pr;
+                if (isUsingPVSyst && importedPVSystData.monthlySummary && importedPVSystData.monthlySummary[i]) {
+                    const mData = importedPVSystData.monthlySummary[i];
+                    eGridMWh = mData.eGridMWh;
+                    pr = mData.avgPR > 0 ? mData.avgPR : 0.82;
+                    globIncKWh = PSH * 30;
+                    tAmbAvg = 30.0;
+                    eArrayMWh = pr > 0 ? (eGridMWh / pr) : eGridMWh;
+                    if (pr > 0) { prSum += pr; prCount++; }
+                } else {
+                    globIncKWh = PSH * 30; // Just an approximation for display
+                    tAmbAvg = 30.0;
+                    eArrayMWh = (kwp * PSH * 30) / 1000;
+                    eGridMWh = eArrayMWh; // no PR or clipping in simple mode
+                    pr = 1.0;
+                }
 
                 totalGlobInc += globIncKWh;
+                totalEArrayMWh += eArrayMWh;
                 totalEGridMWh += eGridMWh;
 
                 const tr = document.createElement('tr');
@@ -807,15 +927,19 @@
                 tbody.appendChild(tr);
             }
 
+            const overallPR = (isUsingPVSyst && prCount > 0) ? (prSum / prCount) : 1.0;
+            const finalEGridYear = isUsingPVSyst ? importedPVSystData.annualTotalMWh : totalEGridMWh;
+            const finalEArrayYear = isUsingPVSyst ? totalEArrayMWh : totalEGridMWh;
+
             const trTotal = document.createElement('tr');
             trTotal.className = 'total-row';
             trTotal.innerHTML = `
                 <td>Year</td>
                 <td>${totalGlobInc.toFixed(1)}</td>
                 <td>30.00</td>
-                <td>${totalEGridMWh.toFixed(2)}</td>
-                <td>${totalEGridMWh.toFixed(2)}</td>
-                <td>1.000</td>
+                <td>${finalEArrayYear.toFixed(2)}</td>
+                <td>${finalEGridYear.toFixed(2)}</td>
+                <td>${overallPR.toFixed(3)}</td>
             `;
             tbody.appendChild(trTotal);
         }
@@ -1205,7 +1329,13 @@
             const designedKwp = parseFloat(document.getElementById('kwpInput').value) || 0;
             const designedInvLimit = parseFloat(document.getElementById('invInput').value) || 0;
             const designedPeakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
+            const isUsingPVSyst = (activeSolarSource === 'pvsyst' || activeSolarSource === 'compare') && importedPVSystData;
             const designedSolarAtHour = (hour) => {
+                if (isUsingPVSyst) {
+                    const hFloor = Math.floor(hour) % 24;
+                    const dc = importedPVSystData.hourlyMeanProfile[hFloor] || 0;
+                    return designedInvLimit > 0 ? Math.min(dc, designedInvLimit) : dc;
+                }
                 if (hour < SOLAR_SUNRISE || hour >= SOLAR_SUNSET || designedKwp <= 0) return 0;
                 const dc = designedKwp * designedPeakFactor * Math.sin(Math.PI * (hour - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
                 return designedInvLimit > 0 ? Math.min(dc, designedInvLimit) : dc;
@@ -1283,8 +1413,8 @@
 
             const layout = LAYOUT_7();
             const periodLabel = netLoadPeriod.charAt(0).toUpperCase() + netLoadPeriod.slice(1);
-            const baseLabel = importCol ? 'Import' : 'Consumption − Phase 1';
-            layout.title = chartTitle('Imported Net Load', `${periodLabel} average · Net Load = ${baseLabel} − Designed Solar Phase 2 (${designedKwp} kWp)`);
+            const solarSourceLabel = isUsingPVSyst ? 'PVSyst Simulation E_Grid' : `Designed Solar (${designedKwp} kWp)`;
+            layout.title = chartTitle('Imported Net Load', `${periodLabel} average · Net Load = ${baseLabel} − ${solarSourceLabel}`);
             layout.xaxis.type = 'category';
             layout.xaxis.categoryorder = 'array';
             layout.xaxis.categoryarray = x;
@@ -1307,6 +1437,13 @@
             x: times, y: Array(times.length).fill(0),
             mode: 'lines', name: `<b>Solar Gen</b>`, line: { shape: 'spline', color: '#4fc3f7', width: 3, dash: 'dot' },
             fill: 'tozeroy', fillcolor: 'rgba(79, 195, 247, 0.25)'
+        });
+
+        compareTraceIndex = traces.length;
+        traces.push({
+            x: times, y: Array(times.length).fill(0),
+            mode: 'lines', name: `<b>Solar Gen (Formula)</b>`, line: { shape: 'spline', color: '#8b5cf6', width: 2.5, dash: 'dash' },
+            visible: false
         });
 
         Plotly.newPlot('chart1', traces, LAYOUT_1(), PLOT_CONFIG);
@@ -1449,7 +1586,17 @@
                         kw: p.kw
                     })),
                     plantReportData: serializeReportData(plantReportData),
-                    importedNetLoadData: serializeReportData(importedNetLoadData)
+                    importedNetLoadData: serializeReportData(importedNetLoadData),
+                    importedPVSystData: importedPVSystData ? {
+                        meta: importedPVSystData.meta,
+                        totalPoints: importedPVSystData.totalPoints,
+                        peakPowerKw: importedPVSystData.peakPowerKw,
+                        annualTotalMWh: importedPVSystData.annualTotalMWh,
+                        avgDailyKwh: importedPVSystData.avgDailyKwh,
+                        hourlyMeanProfile: importedPVSystData.hourlyMeanProfile,
+                        monthlySummary: importedPVSystData.monthlySummary
+                    } : null,
+                    activeSolarSource: activeSolarSource
                 };
                 localStorage.setItem('solarLoadReaderImportedState', JSON.stringify(payload));
             } catch (err) {
@@ -1468,7 +1615,20 @@
                     localStorage.removeItem('solarLoadReaderImportedState');
                     return false;
                 }
-                if (!payload.rawDataPoints || payload.rawDataPoints.length === 0) return false;
+
+                if (payload.importedPVSystData) {
+                    importedPVSystData = payload.importedPVSystData;
+                    activeSolarSource = payload.activeSolarSource || 'pvsyst';
+                    updatePVSystUI();
+                }
+
+                if (!payload.rawDataPoints || payload.rawDataPoints.length === 0) {
+                    if (importedPVSystData) {
+                        updateDashboard();
+                        return true;
+                    }
+                    return false;
+                }
 
                 rawDataPoints = payload.rawDataPoints.map(p => ({
                     datetime: new Date(p.datetime),
@@ -1542,34 +1702,502 @@
         const dropzone = document.getElementById('dropzone');
         const fileInput = document.getElementById('fileInput');
 
-        dropzone.addEventListener('click', () => fileInput.click());
+        if (dropzone && fileInput) {
+            dropzone.addEventListener('click', (e) => {
+                if (e.target.tagName && e.target.tagName.toLowerCase() === 'button') {
+                    return;
+                }
+                fileInput.click();
+            });
 
-        dropzone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropzone.classList.add('dragover');
-        });
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
 
-        dropzone.addEventListener('dragleave', () => {
-            dropzone.classList.remove('dragover');
-        });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
 
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropzone.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) {
-                handleFileUpload(e.dataTransfer.files);
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    handleFileUpload(e.dataTransfer.files);
+                }
+            });
+
+            fileInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileUpload(e.target.files);
+                    fileInput.value = '';
+                }
+            });
+        }
+
+        // --- PVSyst Simulation (E_Grid) Upload & Parsing ---
+        const pvsystDropzone = document.getElementById('pvsystDropzone');
+        const pvsystFileInput = document.getElementById('pvsystFileInput');
+
+        if (pvsystDropzone && pvsystFileInput) {
+            pvsystDropzone.addEventListener('click', (e) => {
+                if (e.target.tagName && e.target.tagName.toLowerCase() === 'button') {
+                    return;
+                }
+                pvsystFileInput.click();
+            });
+
+            pvsystDropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                pvsystDropzone.classList.add('dragover');
+            });
+
+            pvsystDropzone.addEventListener('dragleave', () => {
+                pvsystDropzone.classList.remove('dragover');
+            });
+
+            pvsystDropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                pvsystDropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    handlePVSystUpload(e.dataTransfer.files);
+                }
+            });
+
+            pvsystFileInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            pvsystFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handlePVSystUpload(e.target.files);
+                    pvsystFileInput.value = '';
+                }
+            });
+        }
+
+        function parsePVSystContent(textOrBuffer, fileName) {
+            let text = '';
+            if (typeof textOrBuffer === 'string') {
+                text = textOrBuffer;
+            } else {
+                const bytes = new Uint8Array(textOrBuffer);
+                try {
+                    if (fileName && (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls'))) {
+                        const workbook = XLSX.read(bytes, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        text = XLSX.utils.sheet_to_csv(firstSheet);
+                    } else {
+                        text = new TextDecoder('utf-8').decode(bytes);
+                        if (text.includes('\uFFFD')) {
+                            try { text = new TextDecoder('windows-874').decode(bytes); } catch (e) { }
+                        }
+                    }
+                } catch (err) {
+                    text = new TextDecoder('utf-8').decode(bytes);
+                }
             }
-        });
 
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFileUpload(e.target.files);
+            const lines = text.split(/\r?\n/);
+            let meta = {
+                software: 'PVSYST',
+                project: '',
+                projectDesc: '',
+                site: '',
+                weather: '',
+                variant: '',
+                simDate: '',
+                simPeriod: '',
+                fileName: fileName || 'PVSYST_Export.csv'
+            };
+
+            let headerLineIdx = -1;
+            let unitLineIdx = -1;
+            let colMap = { date: -1, pr: -1, eGrid: -1 };
+
+            for (let i = 0; i < Math.min(lines.length, 40); i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                if (line.toUpperCase().includes('PVSYST')) {
+                    meta.software = line.replace(/^\uFEFF/, '').trim();
+                } else if (line.toLowerCase().startsWith('project,')) {
+                    const parts = line.split(',');
+                    meta.project = parts[1] ? parts[1].trim() : '';
+                    if (parts[3]) meta.projectDesc = parts[3].trim();
+                } else if (line.toLowerCase().startsWith('geographical site,')) {
+                    const parts = line.split(',');
+                    meta.site = (parts[3] || parts[1] || '').trim();
+                } else if (line.toLowerCase().startsWith('weather data,')) {
+                    const parts = line.split(',');
+                    meta.weather = (parts[3] || parts[1] || '').trim();
+                } else if (line.toLowerCase().startsWith('simulation variant,')) {
+                    const parts = line.split(',');
+                    meta.variant = (parts[3] || parts[1] || '').trim();
+                } else if (line.toLowerCase().startsWith('simulation date,')) {
+                    const parts = line.split(',');
+                    meta.simDate = (parts[2] || parts[1] || '').trim();
+                } else if (line.toLowerCase().startsWith('simulation:,')) {
+                    meta.simPeriod = line.replace(/^simulation:,/i, '').trim();
+                }
+
+                const lowerLine = line.toLowerCase();
+                if ((lowerLine.includes('date') || lowerLine.includes('time')) && (lowerLine.includes('e_grid') || lowerLine.includes('egrid') || lowerLine.includes('pr'))) {
+                    headerLineIdx = i;
+                    unitLineIdx = i + 1;
+                    const cols = line.split(',').map(c => c.trim().toLowerCase());
+                    cols.forEach((col, idx) => {
+                        if (col === 'date' || col === 'dates' || col === 'time') colMap.date = idx;
+                        else if (col === 'pr' || col.includes('perf') || col.includes('ratio')) colMap.pr = idx;
+                        else if (col === 'e_grid' || col === 'egrid' || col.includes('e_grid')) colMap.eGrid = idx;
+                    });
+                    break;
+                }
             }
-        });
+
+            if (headerLineIdx === -1 || colMap.date === -1 || colMap.eGrid === -1) {
+                return null;
+            }
+
+            const startRow = unitLineIdx + 1;
+            const hourlyData = [];
+            let peakPowerKw = 0;
+            let totalEnergyKwh = 0;
+
+            const hourSums = new Array(24).fill(0);
+            const hourCounts = new Array(24).fill(0);
+
+            const monthlyData = Array.from({ length: 12 }, () => ({
+                eGridKwh: 0,
+                prDaylightSum: 0,
+                prDaylightCount: 0
+            }));
+
+            for (let i = startRow; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const cols = line.split(',');
+                if (cols.length <= Math.max(colMap.date, colMap.eGrid)) continue;
+
+                const dateStr = cols[colMap.date].trim();
+                const dateParts = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{1,2})/);
+                let d = 1, m = 1, y = 2024, h = 0, min = 0;
+                if (dateParts) {
+                    d = parseInt(dateParts[1], 10);
+                    m = parseInt(dateParts[2], 10);
+                    y = parseInt(dateParts[3], 10);
+                    if (y < 100) y += 2000;
+                    h = parseInt(dateParts[4], 10);
+                    min = parseInt(dateParts[5], 10);
+                } else {
+                    const dt = new Date(dateStr);
+                    if (!isNaN(dt.getTime())) {
+                        d = dt.getDate();
+                        m = dt.getMonth() + 1;
+                        y = dt.getFullYear();
+                        h = dt.getHours();
+                        min = dt.getMinutes();
+                    } else {
+                        continue;
+                    }
+                }
+
+                const rawEGrid = parseFloat(cols[colMap.eGrid]);
+                if (isNaN(rawEGrid)) continue;
+
+                const eGridKw = Math.max(0, rawEGrid);
+                const pr = colMap.pr >= 0 ? (parseFloat(cols[colMap.pr]) || 0) : 0;
+
+                if (eGridKw > peakPowerKw) {
+                    peakPowerKw = eGridKw;
+                }
+
+                totalEnergyKwh += eGridKw;
+
+                if (h >= 0 && h < 24) {
+                    hourSums[h] += eGridKw;
+                    hourCounts[h]++;
+                }
+
+                const monthIdx = m - 1;
+                if (monthIdx >= 0 && monthIdx < 12) {
+                    monthlyData[monthIdx].eGridKwh += eGridKw;
+                    if (eGridKw > 0 && pr > 0) {
+                        monthlyData[monthIdx].prDaylightSum += pr;
+                        monthlyData[monthIdx].prDaylightCount++;
+                    }
+                }
+
+                hourlyData.push({
+                    dateStr,
+                    month: m,
+                    day: d,
+                    hour: h,
+                    eGridKw,
+                    pr
+                });
+            }
+
+            if (hourlyData.length === 0) return null;
+
+            const hourlyMeanProfile = hourSums.map((sum, h) => hourCounts[h] > 0 ? (sum / hourCounts[h]) : 0);
+            const avgDailyKwh = totalEnergyKwh / (hourlyData.length / 24);
+
+            const monthlySummary = monthlyData.map((m, idx) => {
+                const eGridMWh = m.eGridKwh / 1000;
+                const avgPR = m.prDaylightCount > 0 ? (m.prDaylightSum / m.prDaylightCount) : 0;
+                return {
+                    monthIdx: idx,
+                    eGridMWh: parseFloat(eGridMWh.toFixed(2)),
+                    avgPR: parseFloat(avgPR.toFixed(3))
+                };
+            });
+
+            return {
+                meta,
+                totalPoints: hourlyData.length,
+                peakPowerKw: parseFloat(peakPowerKw.toFixed(2)),
+                annualTotalMWh: parseFloat((totalEnergyKwh / 1000).toFixed(2)),
+                avgDailyKwh: parseFloat(avgDailyKwh.toFixed(2)),
+                hourlyMeanProfile,
+                monthlySummary,
+                hourlyData
+            };
+        }
+
+        function handlePVSystUpload(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const statusEl = document.getElementById('pvsystStatus');
+            if (statusEl) statusEl.innerHTML = `⏳ กำลังอ่านข้อมูล PVSyst จาก ${file.name}...`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const parsed = parsePVSystContent(arrayBuffer, file.name);
+                    if (!parsed) {
+                        if (statusEl) statusEl.innerHTML = `❌ ไม่พบข้อมูลคอลัมน์ date และ E_Grid ในไฟล์ ${file.name} กรุณาตรวจสอบว่าเป็นไฟล์ PVSyst Hourly Simulation Export`;
+                        return;
+                    }
+                    importedPVSystData = parsed;
+                    activeSolarSource = 'pvsyst';
+
+                    updatePVSystUI();
+                    updateDashboard();
+                    saveImportedState(lastUploadedFiles.map(f => f.name));
+                } catch (err) {
+                    console.error('Error parsing PVSyst file', err);
+                    if (statusEl) statusEl.innerHTML = `❌ เกิดข้อผิดพลาดในการอ่านไฟล์: ${err.message}`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function updatePVSystUI() {
+            const statusEl = document.getElementById('pvsystStatus');
+            const infoBox = document.getElementById('pvsystInfoBox');
+            const badge = document.getElementById('pvsystSourceBadge');
+            const srcGroup = document.getElementById('solarSourceControlGroup');
+
+            // Tab 1 toolbar buttons
+            const btnTbFormula = document.getElementById('btnSourceFormula');
+            const btnTbPVSyst = document.getElementById('btnSourcePVSyst');
+            const btnTbCompare = document.getElementById('btnSourceCompare');
+
+            // Tab 2 panel buttons
+            const btnFinFormula = document.getElementById('btnUseFormula');
+            const btnFinPVSyst = document.getElementById('btnUsePVSyst');
+            const btnFinCompare = document.getElementById('btnUseCompare');
+
+            const hasPVSyst = !!importedPVSystData;
+
+            // Synchronize active states
+            [btnTbFormula, btnFinFormula].forEach(b => {
+                if (b) b.classList.toggle('active', activeSolarSource === 'formula');
+            });
+            [btnTbPVSyst, btnFinPVSyst].forEach(b => {
+                if (b) {
+                    b.classList.toggle('active', activeSolarSource === 'pvsyst');
+                    b.style.opacity = hasPVSyst ? '1' : '0.65';
+                }
+            });
+            [btnTbCompare, btnFinCompare].forEach(b => {
+                if (b) {
+                    b.classList.toggle('active', activeSolarSource === 'compare');
+                    b.style.opacity = hasPVSyst ? '1' : '0.65';
+                }
+            });
+
+            if (!hasPVSyst) {
+                if (statusEl) {
+                    statusEl.innerHTML = `ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้สูตรคำนวณมาตรฐาน kWp × PSH)`;
+                    statusEl.style.background = '#fef9c3';
+                    statusEl.style.color = '#854d0e';
+                    statusEl.style.borderColor = '#fef08a';
+                }
+                if (infoBox) infoBox.style.display = 'none';
+                if (badge) badge.style.display = 'none';
+                if (srcGroup) srcGroup.style.display = 'none';
+                return;
+            }
+
+            if (srcGroup) srcGroup.style.display = 'flex';
+
+            if (badge) {
+                badge.style.display = 'inline-block';
+                if (activeSolarSource === 'pvsyst') {
+                    badge.textContent = '☀️ PVSyst Active';
+                    badge.style.background = '#fef3c7';
+                    badge.style.color = '#b45309';
+                } else if (activeSolarSource === 'compare') {
+                    badge.textContent = '🔀 Compare Active';
+                    badge.style.background = '#ede9fe';
+                    badge.style.color = '#6d28d9';
+                } else {
+                    badge.textContent = '⚙️ Formula Active';
+                    badge.style.background = '#f1f5f9';
+                    badge.style.color = '#64748b';
+                }
+            }
+
+            if (statusEl) {
+                statusEl.innerHTML = `✅ นำเข้าข้อมูล PVSyst สำเร็จ: <b>${importedPVSystData.meta.project || importedPVSystData.meta.fileName}</b> (${importedPVSystData.totalPoints.toLocaleString()} ชม.)`;
+                statusEl.style.background = '#ecfdf5';
+                statusEl.style.color = '#065f46';
+                statusEl.style.borderColor = '#a7f3d0';
+            }
+
+            if (infoBox) {
+                infoBox.style.display = 'block';
+                const metaDiv = document.getElementById('pvsystMetaTags');
+                if (metaDiv) {
+                    let tagsHtml = '';
+                    if (importedPVSystData.meta.project) tagsHtml += `<span class="pvsyst-meta-badge">📁 ${importedPVSystData.meta.project}</span>`;
+                    if (importedPVSystData.meta.site) tagsHtml += `<span class="pvsyst-meta-badge">📍 ${importedPVSystData.meta.site}</span>`;
+                    if (importedPVSystData.meta.variant) tagsHtml += `<span class="pvsyst-meta-badge">⚙️ ${importedPVSystData.meta.variant}</span>`;
+                    metaDiv.innerHTML = tagsHtml;
+                }
+
+                const peakEl = document.getElementById('pvsystPeakKw');
+                const annualEl = document.getElementById('pvsystAnnualMwh');
+                const hoursEl = document.getElementById('pvsystTotalHours');
+                const dailyEl = document.getElementById('pvsystAvgDaily');
+
+                if (peakEl) peakEl.textContent = importedPVSystData.peakPowerKw.toLocaleString();
+                if (annualEl) annualEl.textContent = importedPVSystData.annualTotalMWh.toLocaleString();
+                if (hoursEl) hoursEl.textContent = importedPVSystData.totalPoints.toLocaleString();
+                if (dailyEl) dailyEl.textContent = importedPVSystData.avgDailyKwh.toLocaleString();
+            }
+        }
+
+        function setSolarSource(source) {
+            if ((source === 'pvsyst' || source === 'compare') && !importedPVSystData) {
+                switchTab('tab-finance');
+                const dz = document.getElementById('pvsystDropzone');
+                if (dz) {
+                    dz.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    dz.style.outline = '3px dashed #d97706';
+                    setTimeout(() => { dz.style.outline = 'none'; }, 3000);
+                }
+                const pInput = document.getElementById('pvsystFileInput');
+                if (pInput) {
+                    setTimeout(() => pInput.click(), 100);
+                }
+                return;
+            }
+            activeSolarSource = source;
+            updatePVSystUI();
+            updateDashboard();
+            saveImportedState(lastUploadedFiles.map(f => f.name));
+        }
+
+        function clearPVSystData() {
+            importedPVSystData = null;
+            activeSolarSource = 'formula';
+            const input = document.getElementById('pvsystFileInput');
+            if (input) input.value = '';
+            updatePVSystUI();
+            updateDashboard();
+            saveImportedState(lastUploadedFiles.map(f => f.name));
+        }
+
+        // Resets the Load panel back to its pristine (never-uploaded) state: an empty 24-hour
+        // zero profile, same shape as the placeholder `data` object the page boots with.
+        // PVSyst data (if any) is left untouched.
+        function clearLoadData() {
+            rawDataPoints = [];
+            lastUploadedFiles = [];
+            fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
+            fusionLoadIsGrid = false;
+            plantReportData = null;
+            importedNetLoadData = null;
+
+            const zeroHours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
+            data.time_strs = zeroHours;
+            data.overall_mean = zeroHours.map(() => 0);
+            data.months = {};
+            data.box_data = {};
+            data.midday_min = 0;
+
+            times.length = 0;
+            times.push(...data.time_strs);
+            hours.length = 0;
+            hours.push(...times.map(t => timeSlotToHour(t)));
+
+            replotCharts();
+            renderFusionChart();
+            plantReportNeedsRender = true;
+            if (document.getElementById('tab-plant').classList.contains('active')) {
+                try { renderPlantReport(null); } catch (err) { console.error('renderPlantReport() failed', err); }
+            }
+            try {
+                renderImportedNetLoad(null);
+            } catch (err) {
+                emptyImportedNetLoadChart('ยังไม่มีข้อมูลโหลด — กรุณาอัพโหลดไฟล์');
+            }
+
+            const input = document.getElementById('fileInput');
+            if (input) input.value = '';
+            const statusEl = document.getElementById('uploadStatus');
+            if (statusEl) statusEl.innerHTML = '⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า';
+
+            updateDashboard();
+            saveImportedState([]);
+        }
+
 
         function handleFileUpload(files) {
             if (files.length === 0) return;
 
+            // Auto-detect if user dropped a PVSyst simulation file onto the main dropzone
+            if (files.length === 1) {
+                const fname = (files[0].name || '').toLowerCase();
+                if (fname.includes('pvsyst') || fname.endsWith('.csv') || fname.endsWith('.txt')) {
+                    const testReader = new FileReader();
+                    testReader.onload = function (evt) {
+                        try {
+                            const buf = evt.target.result;
+                            const preview = new TextDecoder('utf-8').decode(new Uint8Array(buf).slice(0, 500));
+                            if (preview.toUpperCase().includes('PVSYST') || (preview.toLowerCase().includes('e_grid') && preview.toLowerCase().includes('date'))) {
+                                handlePVSystUpload(files);
+                                return;
+                            }
+                        } catch (e) { }
+                        proceedWithLoadUpload(files);
+                    };
+                    testReader.readAsArrayBuffer(files[0]);
+                    return;
+                }
+            }
+            proceedWithLoadUpload(files);
+        }
+
+        function proceedWithLoadUpload(files) {
             let filesLoaded = 0;
             fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
             fusionLoadIsGrid = false;
@@ -1584,6 +2212,7 @@
 
             // Show loading status
             document.getElementById('uploadStatus').innerHTML = `⏳ Loading ${files.length} file(s)...`;
+
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -2416,6 +3045,13 @@
                 fill: 'tozeroy', fillcolor: 'rgba(79, 195, 247, 0.25)'
             });
             solarTraceIndex = traces1.length - 1;
+
+            traces1.push({
+                x: times, y: Array(times.length).fill(0),
+                mode: 'lines', name: `<b>Solar Gen (Formula)</b>`, line: { shape: 'spline', color: '#8b5cf6', width: 2.5, dash: 'dash' },
+                visible: false
+            });
+            compareTraceIndex = traces1.length - 1;
 
             Plotly.newPlot('chart1', traces1, LAYOUT_1(), PLOT_CONFIG);
 
