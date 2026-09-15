@@ -317,9 +317,15 @@
             const chargeEff = Math.sqrt(batEff);
             const dischargeEff = Math.sqrt(batEff);
             const socFloor = batCap * (1 - dod / 100); // reserve that must not be discharged (DOD limit)
-            let soc = batCap; // start FULL — in steady daily operation the battery is charged overnight
-            // and begins the day full. (The warm-up passes below also settle it to a
-            // periodic day, so this is just the initial guess.)
+            // Start EMPTY (at the DOD floor), not full. With real load, the warm-up passes below
+            // settle SOC to the same periodic day either way, so the starting guess doesn't matter.
+            // But with zero load (e.g. PVSyst production reviewed on its own, no load profile
+            // uploaded yet) nothing ever discharges the battery, so starting it full left it
+            // permanently full - it could never accept the day's solar, showing 0% used / 100%
+            // curtailed regardless of capacity. Starting empty lets it actually charge from the
+            // daily solar surplus in that case, which is the only meaningful thing a battery can
+            // do without a load to discharge into.
+            let soc = socFloor;
             const n = solar_dc_curve.length;
             const solar_actual = new Array(n).fill(0);
             const net_curve = new Array(n).fill(0);
@@ -331,11 +337,19 @@
             let grid_charge_kwh = 0;
             let curtailed = 0;
 
-            // The off-peak charging window (22:00–08:00) wraps across midnight, so a single-day pass
-            // that starts at the SOC floor would charge TWICE (00:00–08:00 AND 22:00–24:00) and grid
+            // The off-peak charging window (22:00-08:00) wraps across midnight, so a single-day pass
+            // that starts at the SOC floor would charge TWICE (00:00-08:00 AND 22:00-24:00) and grid
             // charge could exceed the battery capacity. Run the day several times, carrying SOC over,
             // so it settles to a steady-state (periodic) day; only the final pass's results are kept.
-            const WARMUP_PASSES = 3;
+            //
+            // That convergence assumes a periodic charge/discharge cycle exists. With zero load
+            // (e.g. reviewing PVSyst production alone, before/without a load profile), nothing ever
+            // discharges the battery, so it fills once and then just stays full every subsequent
+            // pass - the "steady state" hides the one interesting thing there is to show: how the
+            // battery fills from the day's solar. So skip the multi-pass convergence in that case
+            // and report a single pass starting from the DOD floor instead.
+            const hasLoad = load_curve.some(v => v > 0);
+            const WARMUP_PASSES = hasLoad ? 3 : 0;
             for (let pass = 0; pass <= WARMUP_PASSES; pass++) {
                 // Reset per-day accumulators & curves each pass (SOC intentionally carries over).
                 self_consumed = 0; direct_consumed = 0; grid_charge_kwh = 0; curtailed = 0;
