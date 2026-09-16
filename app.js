@@ -459,11 +459,22 @@
                 if (hours.length === 24) {
                     pvsyst_dc_curve = importedPVSystData.hourlyMeanProfile.slice();
                 } else {
-                    pvsyst_dc_curve = hours.map(h => {
+                    // "Mon 09:00"-style labels (weekly view) carry a real day-of-week - use the actual
+                    // per-weekday average for that day instead of just repeating the single annual-average
+                    // daily profile 7 times, which looked identical every day and hid real weather-driven
+                    // day-to-day variation that's genuinely in the imported data.
+                    const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+                    pvsyst_dc_curve = times.map((t, i) => {
+                        const h = hours[i];
+                        const dayLabel = t.includes(' ') ? t.split(' ')[0] : null;
+                        const wd = dayLabel != null ? WEEKDAY_INDEX[dayLabel] : null;
+                        const profile = (wd != null && importedPVSystData.weekdayHourlyProfiles)
+                            ? importedPVSystData.weekdayHourlyProfiles[wd]
+                            : importedPVSystData.hourlyMeanProfile;
                         const hFloor = Math.floor(h) % 24;
                         const hNext = (hFloor + 1) % 24;
                         const frac = h - Math.floor(h);
-                        return importedPVSystData.hourlyMeanProfile[hFloor] * (1 - frac) + importedPVSystData.hourlyMeanProfile[hNext] * frac;
+                        return profile[hFloor] * (1 - frac) + profile[hNext] * frac;
                     });
                 }
                 pvsyst_curve = pvsyst_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
@@ -1940,6 +1951,11 @@
             const hourCounts = new Array(24).fill(0);
             const monthHourSums = Array.from({ length: 12 }, () => new Array(24).fill(0));
             const monthHourCounts = Array.from({ length: 12 }, () => new Array(24).fill(0));
+            // Real per-weekday averages (index = JS Date.getDay(): 0=Sun..6=Sat) for the Weekly view,
+            // so e.g. Tuesday shows the actual average of every Tuesday in the dataset instead of
+            // just repeating the single annual-average daily profile 7 times.
+            const weekdayHourSums = Array.from({ length: 7 }, () => new Array(24).fill(0));
+            const weekdayHourCounts = Array.from({ length: 7 }, () => new Array(24).fill(0));
 
             const monthlyData = Array.from({ length: 12 }, () => ({
                 eGridKwh: 0,
@@ -2006,6 +2022,12 @@
                     }
                 }
 
+                if (h >= 0 && h < 24) {
+                    const dow = new Date(y, m - 1, d).getDay();
+                    weekdayHourSums[dow][h] += eGridKw;
+                    weekdayHourCounts[dow][h]++;
+                }
+
                 hourlyData.push({
                     dateStr,
                     month: m,
@@ -2023,6 +2045,8 @@
             // traces on chart1 (same idea as the per-month "Avg Load" traces real load data gets).
             const monthlyHourlyProfiles = monthHourSums.map((sums, mi) =>
                 sums.map((sum, h) => monthHourCounts[mi][h] > 0 ? (sum / monthHourCounts[mi][h]) : 0));
+            const weekdayHourlyProfiles = weekdayHourSums.map((sums, wd) =>
+                sums.map((sum, h) => weekdayHourCounts[wd][h] > 0 ? (sum / weekdayHourCounts[wd][h]) : 0));
             const avgDailyKwh = totalEnergyKwh / (hourlyData.length / 24);
 
             const monthlySummary = monthlyData.map((m, idx) => {
@@ -2043,6 +2067,7 @@
                 avgDailyKwh: parseFloat(avgDailyKwh.toFixed(2)),
                 hourlyMeanProfile,
                 monthlyHourlyProfiles,
+                weekdayHourlyProfiles,
                 monthlySummary,
                 hourlyData
             };
