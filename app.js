@@ -1030,7 +1030,9 @@
             document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            evt.target.classList.add('active');
+            // Called without an event from setSolarSource(): find the tab button by its onclick target
+            const tabBtn = (evt && evt.target && evt.target.closest('.tab-btn')) || document.querySelector(`.tab-btn[onclick*="'${tabId}'"]`);
+            if (tabBtn) tabBtn.classList.add('active');
             if (tabId === 'tab-plant' && plantReportNeedsRender) {
                 renderPlantReport(plantReportData);
             }
@@ -2213,7 +2215,7 @@
 
         function setSolarSource(source) {
             if ((source === 'pvsyst' || source === 'compare') && !importedPVSystData) {
-                switchTab('tab-finance');
+                switchTab('tab-input');
                 const dz = document.getElementById('pvsystDropzone');
                 if (dz) {
                     dz.scrollIntoView({ behavior: 'smooth', block: 'center' });

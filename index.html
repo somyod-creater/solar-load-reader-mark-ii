@@ -3,33 +3,47 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>☀️ Solar Load Reader: Solar Sizing & Financial Analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="chart-theme.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <div class="container">
-        <div class="header">
-            <h2>☀️ Solar Load Reader: Solar Sizing & Financial Analysis</h2>
+    <header class="app-header">
+        <div class="app-header-inner">
+            <div class="brand">
+                <div class="brand-logo" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></div>
+                <div>
+                    <div class="brand-title">Solar Load Reader</div>
+                    <div class="brand-subtitle">MK-II</div>
+                </div>
+            </div>
+            <nav class="tab-nav" aria-label="Sections">
+                <button class="tab-btn active" onclick="switchTab('tab-input', event)"><span class="step">01</span>Input Data</button>
+                <button class="tab-btn" onclick="switchTab('tab-load', event)"><span class="step">02</span>Load &amp; Solar</button>
+                <button class="tab-btn" onclick="switchTab('tab-finance', event)"><span class="step">03</span>Finance</button>
+                <button class="tab-btn" onclick="switchTab('tab-plant', event)"><span class="step">04</span>Plant Report</button>
+            </nav>
         </div>
+    </header>
 
-        <div class="tab-nav">
-            <button class="tab-btn active" onclick="switchTab('tab-load', event)">📊 Load &amp; Solarcell</button>
-            <button class="tab-btn" onclick="switchTab('tab-finance', event)">💰 Finance</button>
-            <button class="tab-btn" onclick="switchTab('tab-plant', event)">📋 Plant Report</button>
-        </div>
+    <main class="container">
 
-        <!-- Tab 1: Load & Solar -->
-        <div id="tab-load" class="tab-page active">
+        <!-- Tab 2: Load & Solar -->
+        <div id="tab-load" class="tab-page">
             <div class="chart-toolbar">
                 <div class="solar-source-toolbar" id="solarSourceToolbar">
-                    <span class="source-toolbar-label">☀️ ข้อมูล Solar บนกราฟ:</span>
+                    <span class="source-toolbar-label">Solar source</span>
                     <div class="time-segment" id="solarSourceSegment">
-                        <button type="button" id="btnSourceFormula" class="active" onclick="setSolarSource('formula')">⚙️ สูตรคำนวณ</button>
-                        <button type="button" id="btnSourcePVSyst" onclick="setSolarSource('pvsyst')">☀️ จำลอง PVSyst (E_Grid)</button>
-                        <button type="button" id="btnSourceCompare" onclick="setSolarSource('compare')">🔀 เปรียบเทียบ</button>
+                        <button type="button" id="btnSourceFormula" class="active" onclick="setSolarSource('formula')">สูตรคำนวณ</button>
+                        <button type="button" id="btnSourcePVSyst" onclick="setSolarSource('pvsyst')">PVSyst (E_Grid)</button>
+                        <button type="button" id="btnSourceCompare" onclick="setSolarSource('compare')">เปรียบเทียบ</button>
                     </div>
                 </div>
                 <div class="time-segment" id="netLoadTimeSegment">
@@ -39,6 +53,7 @@
                     <button type="button" data-period="monthly" onclick="setNetLoadPeriod('monthly')">Monthly</button>
                 </div>
             </div>
+            <section class="chart-card">
             <div id="chart1"></div>
             <div class="chart-caption" id="chart1Caption">
                 💡 <b>How to read this chart:</b> The black line represents the <b>actual power consumed by the
@@ -46,6 +61,7 @@
                 production peaks at noon and drops to zero at night. If the blue area exceeds the black line, it
                 indicates surplus generation.
             </div>
+            </section>
             <div id="chart-fusion" style="display:none; width: 100%; min-height: 400px; margin-top: 20px;"></div>
 
             <!-- Battery Feasibility Analysis Panel -->
@@ -242,6 +258,7 @@
                 </div>
             </div>
 
+            <section class="chart-card">
             <div id="chart7"></div>
             <div class="chart-caption">
                 <b>Imported Net Load:</b> ใช้ <b>Import (kWh)</b> = โหลดคงเหลือปัจจุบัน (หลังหักโซลาร์ Phase 1
@@ -249,6 +266,8 @@
                     Import − Phase 2</b> คือโหลดที่ยังต้องซื้อจากกริดหลังติด Phase 2 (เส้น Consumption =
                 โหลดเดิมก่อนมีโซลาร์, Solar Phase 1 = Inverter Yield ปัจจุบัน)
             </div>
+            </section>
+            <section class="chart-card">
             <div id="chart3"></div>
             <div class="chart-caption">
                 💡 <b>Solar Only (No Battery):</b> The <span class="tag" style="background:#ff6d00;">orange line</span>
@@ -256,6 +275,8 @@
                     style="background:#e53935;">red area</span> at noon, which represents surplus solar generation that
                 is <b>curtailed/wasted</b> due to lack of storage. This illustrates why a battery system is beneficial.
             </div>
+            </section>
+            <section class="chart-card">
             <div id="chart4"></div>
             <div class="chart-caption">
                 💡 <b>With BESS Battery:</b> The <span class="tag" style="background:#e91e63;">pink area</span> shows
@@ -263,6 +284,8 @@
                 energy and discharges it during peak periods, flattening the net grid demand profile to reduce both
                 energy charges and Peak Demand charges (Demand Charge).
             </div>
+            </section>
+            <section class="chart-card">
             <div id="chart6"></div>
             <div class="chart-caption">
                 💡 <b>Battery Operation:</b> The green area <span class="tag"
@@ -272,6 +295,8 @@
                 (evening, night, or peak hours). The purple line <span class="tag"
                     style="background:#9c27b0;">(SOC)</span> shows the battery's <b>State of Charge (%)</b>.
             </div>
+            </section>
+            <section class="chart-card">
             <div id="chart5"></div>
             <div class="chart-caption">
                 💡 <b>Comparison Summary:</b> Net grid power purchased comparing <span class="tag"
@@ -279,32 +304,38 @@
                     style="background:#4caf50;">Solar + Battery</span>. A <b>lower and flatter</b> green curve indicates
                 greater cost savings and more effective peak demand reduction.
             </div>
+            </section>
         </div>
 
-        <!-- Tab 2: Finance -->
-        <div id="tab-finance" class="tab-page">
+        <!-- Tab 1: Input Data -->
+        <div id="tab-input" class="tab-page active">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">Input Data</h2>
+                    <p class="page-sub">อัปโหลดข้อมูลโหลด ตั้งค่าระบบและอัตราค่าไฟ แล้วกด Run เพื่อดูผลที่หน้า Finance</p>
+                </div>
+            </div>
 
-            <!-- Upload Panels Row -->
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; width: 100%; max-width: 1040px;">
+            <div class="input-layout">
+            <!-- Column 1: uploads -->
+            <div class="upload-grid">
                 <!-- Excel Load Upload Panel -->
-                <div class="panel" style="flex: 1; min-width: 320px; border-top-color: #28a745; margin-bottom: 0;">
-                    <h4>📥 อัพโหลดข้อมูลโหลด (Upload Load Profile Excel)</h4>
-                    <div style="display: flex; gap: 15px; align-items: flex-start; flex-direction: column;">
-                        <div id="dropzone"
-                            style="width: 100%; box-sizing: border-box; border: 2px dashed #007bff; border-radius: 8px; padding: 18px; text-align: center; background: #f8f9fa; cursor: pointer; transition: 0.3s;">
-                            <span style="font-size: 30px;">📁</span>
-                            <p style="margin: 6px 0 3px 0; font-weight: bold; color: #333; font-size: 13px;">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
-                            <p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">รายงานโหลดรายชั่วโมง หรือ 15 นาที (อัพโหลดทีละหลายไฟล์ได้)</p>
-                            <button type="button" class="btn-browse-file" style="padding: 7px 16px; font-size: 12px; font-weight: 600; border-radius: 6px; background: #0284c7; color: #ffffff; border: none; cursor: pointer;" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
+                <div class="panel">
+                    <h4><span class="accent" style="background: #58A6FF;"></span>Load profile (Excel)</h4>
+                    <div class="upload-body">
+                        <div id="dropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path><path d="M8 13h8M8 17h5"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
+                            <p class="dropzone-sub">รายงานโหลดรายชั่วโมง หรือ 15 นาที (อัพโหลดทีละหลายไฟล์ได้)</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
                         </div>
                         <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
-                        <div style="width: 100%;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <p style="margin: 0; font-weight: bold; color: #444; font-size: 12px;">สถานะโหลด (Load Status):</p>
-                                <button type="button" onclick="clearLoadData()" style="background: none; border: 1px solid #fca5a5; color: #dc2626; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; width: auto; margin-top: 0; flex-shrink: 0;">ล้างข้อมูล</button>
+                        <div>
+                            <div class="status-head">
+                                <p>สถานะโหลด (Load Status):</p>
+                                <button type="button" class="btn-sm btn-danger-outline" onclick="clearLoadData()">ล้างข้อมูล</button>
                             </div>
-                            <div id="uploadStatus"
-                                style="font-size: 12px; color: #c62828; background: #fff5f5; padding: 8px 10px; border-radius: 6px; border: 1px solid #ffdbdb;">
+                            <div id="uploadStatus" class="status-box is-warn">
                                 ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
                             </div>
                         </div>
@@ -312,32 +343,32 @@
                 </div>
 
                 <!-- PVSyst Solar Simulation Upload Panel -->
-                <div class="panel" style="flex: 1; min-width: 320px; border-top-color: #f59e0b; margin-bottom: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <h4 style="margin: 0; border: none; padding: 0;">☀️ นำเข้าผลจำลอง PVSyst (E_Grid)</h4>
-                        <span id="pvsystSourceBadge" style="display:none; font-size:11px; padding:2px 8px; border-radius:12px; background:#dcfce7; color:#15803d; font-weight:600;">Active</span>
+                <div class="panel">
+                    <div class="panel-head">
+                        <h4><span class="accent"></span>PVSyst simulation (E_Grid)</h4>
+                        <span id="pvsystSourceBadge" class="pill" style="display:none;">Active</span>
                     </div>
-                    <div style="display: flex; gap: 15px; align-items: flex-start; flex-direction: column;">
-                        <div id="pvsystDropzone"
-                            style="width: 100%; box-sizing: border-box; border: 2px dashed #f59e0b; border-radius: 8px; padding: 18px; text-align: center; background: #fffdfa; cursor: pointer; transition: 0.3s;">
-                            <span style="font-size: 30px;">☀️</span>
-                            <p style="margin: 6px 0 3px 0; font-weight: bold; color: #92400e; font-size: 13px;">ลากไฟล์ PVSyst (.csv / .txt / .xlsx) หรือคลิกเลือกไฟล์</p>
-                            <p style="margin: 0 0 10px 0; font-size: 11px; color: #78350f;">ดึงข้อมูลการผลิต <b>E_Grid (kW)</b> รายชั่วโมงจาก Simulation จริง</p>
-                            <button type="button" class="btn-browse-file" style="padding: 7px 16px; font-size: 12px; font-weight: 600; border-radius: 6px; background: #d97706; color: #ffffff; border: none; cursor: pointer;" onclick="document.getElementById('pvsystFileInput').click();">☀️ คลิกเลือกไฟล์ PVSyst</button>
+                    <div class="upload-body">
+                        <div id="pvsystDropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์ PVSyst (.csv / .txt / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p class="dropzone-sub">ดึงข้อมูลการผลิต <b>E_Grid (kW)</b> รายชั่วโมงจาก Simulation จริง</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('pvsystFileInput').click();">☀️ คลิกเลือกไฟล์ PVSyst</button>
                         </div>
                         <input type="file" id="pvsystFileInput" accept=".csv,.txt,.xlsx,.xls" style="display: none;">
-                        <div style="width: 100%;">
-                            <div id="pvsystStatus"
-                                style="font-size: 12px; color: #854d0e; background: #fef9c3; padding: 8px 10px; border-radius: 6px; border: 1px solid #fef08a;">
+                        <div>
+                            <!-- background/color/border are toggled by app.js (updatePVSystUI) -->
+                            <div id="pvsystStatus" class="status-box"
+                                style="background: #fef9c3;">
                                 ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้สูตรคำนวณมาตรฐาน kWp × PSH)
                             </div>
-                            <div id="pvsystInfoBox" style="display: none; margin-top: 8px; font-size: 12px; background: #ffffff; border: 1px solid #fed7aa; border-radius: 6px; padding: 10px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <strong style="color: #9a3412;">ข้อมูล PVSyst Simulation:</strong>
-                                    <button type="button" onclick="clearPVSystData()" style="background: none; border: 1px solid #fca5a5; color: #dc2626; border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; width: auto; margin-top: 0; flex-shrink: 0;">ล้างข้อมูล</button>
+                            <div id="pvsystInfoBox" class="info-box">
+                                <div class="info-box-head">
+                                    <strong>ข้อมูล PVSyst Simulation:</strong>
+                                    <button type="button" class="btn-sm btn-danger-outline" onclick="clearPVSystData()">ล้างข้อมูล</button>
                                 </div>
                                 <div id="pvsystMetaTags" style="margin-bottom: 6px;"></div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; color: #334155;">
+                                <div class="info-grid">
                                     <div>⚡ Peak E_Grid: <b id="pvsystPeakKw" style="color: #ea580c;">-</b> kW</div>
                                     <div>🔋 Annual Total: <b id="pvsystAnnualMwh" style="color: #059669;">-</b> MWh</div>
                                     <div>📅 Data Hours: <b id="pvsystTotalHours">-</b> ชม.</div>
@@ -351,14 +382,14 @@
 
             <div class="panel-container">
                 <!-- System & Financial -->
-                <div class="panel" style="max-width: 500px;">
-                    <h4>⚙️ System Sizing & Cost</h4>
-                    <div class="control-group" id="solarSourceControlGroup" style="display:none; background:#fff7ed; padding:8px 10px; border-radius:6px; border:1px solid #fed7aa; margin-bottom:10px;">
-                        <label style="font-size:12px; color:#9a3412; font-weight:600;">แหล่งข้อมูล Solar บนกราฟ & คำนวณ:</label>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
-                            <button type="button" id="btnUseFormula" class="source-toggle-btn active" onclick="setSolarSource('formula')">⚙️ สูตรคำนวณ</button>
-                            <button type="button" id="btnUsePVSyst" class="source-toggle-btn" onclick="setSolarSource('pvsyst')">☀️ จำลอง PVSyst (E_Grid)</button>
-                            <button type="button" id="btnUseCompare" class="source-toggle-btn" onclick="setSolarSource('compare')">🔀 เปรียบเทียบ</button>
+                <div class="panel">
+                    <h4><span class="accent"></span>System sizing &amp; cost</h4>
+                    <div class="control-group source-control" id="solarSourceControlGroup" style="display:none;">
+                        <label>แหล่งข้อมูล Solar บนกราฟ & คำนวณ:</label>
+                        <div class="toggle-group">
+                            <button type="button" id="btnUseFormula" class="source-toggle-btn active" onclick="setSolarSource('formula')">สูตรคำนวณ</button>
+                            <button type="button" id="btnUsePVSyst" class="source-toggle-btn" onclick="setSolarSource('pvsyst')">PVSyst (E_Grid)</button>
+                            <button type="button" id="btnUseCompare" class="source-toggle-btn" onclick="setSolarSource('compare')">เปรียบเทียบ</button>
                         </div>
                     </div>
                     <div class="control-group">
@@ -380,15 +411,10 @@
                         <label>Project Cost (Baht/Wp):</label>
                         <input type="number" id="costInput" value="25" min="0" step="0.5">
                     </div>
-                    <div style="border-top: 1px solid #d0d7de; margin: 12px 0 10px 0; padding-top: 10px;">
-                        <div style="font-weight: bold; color: #1e3a8a; font-size: 13px; margin-bottom: 6px;">⚡
-                            ประเภทผู้ใช้ไฟฟ้า &amp; อัตราค่าไฟ (PEA Tariff)</div>
-                    </div>
-                    <div class="control-group"
-                        style="flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 8px;">
-                        <label style="font-size: 13px;">ประเภทผู้ใช้ไฟฟ้า (Tariff Category):</label>
-                        <select id="tariffProfile" onchange="onTariffProfileChange()"
-                            style="width: 100%; padding: 6px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #b3c2d1; background: #fff; color: #222;">
+                    <div class="panel-section-title">Tariff · PEA</div>
+                    <div class="control-group stack">
+                        <label>ประเภทผู้ใช้ไฟฟ้า (Tariff Category):</label>
+                        <select id="tariffProfile" class="select-full" onchange="onTariffProfileChange()">
                             <optgroup label="🏢 กิจการ / อุตสาหกรรม (Commercial & Industrial)">
                                 <option value="pea_3_2_2" selected>ประเภท 3.2.2 กิจการขนาดกลาง TOU (22–33 kV) [ยอดนิยม]
                                 </option>
@@ -423,51 +449,45 @@
                                 <option value="custom">กำหนดเอง (Custom Rate)</option>
                             </optgroup>
                         </select>
-                        <div id="tariffInfoBadge"
-                            style="font-size: 11px; color: #1e40af; background: #eff6ff; padding: 5px 8px; border-radius: 4px; border-left: 3px solid #3b82f6; line-height: 1.4;">
+                        <div id="tariffInfoBadge" class="info-badge">
                             ⚡ <b>On-Peak:</b> 4.1839 ฿ | <b>Off-Peak:</b> 2.6037 ฿ | <b>Demand:</b> 132.93 ฿/kW
                         </div>
                     </div>
                     <div class="control-group">
-                        <label>On-Peak Rate (Baht/kWh):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">ค่าไฟช่วง Peak /
+                        <label>On-Peak Rate (Baht/kWh):<br><span class="hint">ค่าไฟช่วง Peak /
                                 กลางวัน</span></label>
                         <input type="number" id="rateInput" value="4.1839" min="0" step="0.0001"
                             onchange="onManualRateChange()">
                     </div>
                     <div class="control-group" id="offPeakRateGroup">
-                        <label>Off-Peak Rate (Baht/kWh):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">ค่าไฟช่วง Off-Peak /
+                        <label>Off-Peak Rate (Baht/kWh):<br><span class="hint">ค่าไฟช่วง Off-Peak /
                                 กลางคืน</span></label>
                         <input type="number" id="offPeakRateInput" value="2.6037" min="0" step="0.0001"
                             onchange="onManualRateChange()">
                     </div>
                     <div class="control-group" id="demandRateGroup">
-                        <label>Demand Charge (Baht/kW):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">ค่าความต้องการพลังไฟฟ้า/เดือน</span></label>
+                        <label>Demand Charge (Baht/kW):<br><span class="hint">ค่าความต้องการพลังไฟฟ้า/เดือน</span></label>
                         <input type="number" id="demandRateInput" value="132.93" min="0" step="0.01"
                             onchange="onManualRateChange()">
                     </div>
                     <div class="control-group">
-                        <label>Ft Charge (Baht/kWh):<br><span style="font-weight:normal;font-size:11px;color:#888;">ค่า
+                        <label>Ft Charge (Baht/kWh):<br><span class="hint">ค่า
                                 Ft ผันแปร (บวกเพิ่มต่อหน่วย)</span></label>
                         <input type="number" id="ftInput" value="0.0000" step="0.0001" onchange="updateDashboard()">
                     </div>
                 </div>
 
                 <!-- BESS Configuration Panel -->
-                <div id="bessPanel" class="panel" style="max-width: 500px; border-top-color: #6f42c1;">
-                    <h4>🔋 Battery Energy Storage (BESS)</h4>
-                    <div class="control-group"
-                        style="flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 15px;">
-                        <label style="font-weight: bold; color: #444;">Battery Charging Priority:</label>
+                <div id="bessPanel" class="panel">
+                    <h4><span class="accent" style="background: #2DD4BF;"></span>Battery storage (BESS)</h4>
+                    <div class="control-group stack">
+                        <label>Battery Charging Priority:</label>
+                        <!-- background colours are toggled by app.js (setBatteryMode) -->
                         <div style="display: flex; gap: 10px; width: 100%;">
-                            <button id="btnLoadFirst" type="button" onclick="setBatteryMode('load_first')"
-                                style="margin: 0; padding: 8px 12px; font-size: 13px; background: #6f42c1; color: white; border-radius: 4px; font-weight: bold; cursor: pointer; flex: 1;">Load
-                                First (Support load first)</button>
-                            <button id="btnBatteryFirst" type="button" onclick="setBatteryMode('battery_first')"
-                                style="margin: 0; padding: 8px 12px; font-size: 13px; background: #6c757d; color: white; border-radius: 4px; font-weight: bold; cursor: pointer; flex: 1;">Battery
-                                First (Charge battery first)</button>
+                            <button id="btnLoadFirst" type="button" class="mode-btn" onclick="setBatteryMode('load_first')"
+                                style="background: #6f42c1;">Load First (Support load first)</button>
+                            <button id="btnBatteryFirst" type="button" class="mode-btn" onclick="setBatteryMode('battery_first')"
+                                style="background: #6c757d;">Battery First (Charge battery first)</button>
                         </div>
                     </div>
                     <div class="control-group">
@@ -475,13 +495,11 @@
                         <input type="number" id="batCapInput" value="500" min="0" step="50">
                     </div>
                     <div class="control-group">
-                        <label>PCS Size / AC Output (kW):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">กำลังชาร์จ/ดิสชาร์จสูงสุดของ PCS แยกจาก Inverter Limit ของโซลาร์</span></label>
+                        <label>PCS Size / AC Output (kW):<br><span class="hint">กำลังชาร์จ/ดิสชาร์จสูงสุดของ PCS แยกจาก Inverter Limit ของโซลาร์</span></label>
                         <input type="number" id="pcsInput" value="500" min="0" step="50">
                     </div>
                     <div class="control-group">
-                        <label>Depth of Discharge (DOD %):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">Max battery discharge depth
+                        <label>Depth of Discharge (DOD %):<br><span class="hint">Max battery discharge depth
                                 (10–100%)</span></label>
                         <input type="number" id="dodInput" value="80" min="10" max="100" step="5"
                             onchange="updateDashboard()">
@@ -492,36 +510,40 @@
                         <input type="number" id="batCostInput" value="10000" min="0" step="500">
                     </div>
                     <div class="control-group">
-                        <label>Peak Shaving Target (kW):<br><span
-                                style="font-weight:normal;font-size:11px;color:#888;">🔄 Auto-optimised —
+                        <label>Peak Shaving Target (kW):<br><span class="hint">🔄 Auto-optimised —
                                 คำนวณให้อัตโนมัติทุกครั้ง</span></label>
-                        <div style="display: flex; gap: 5px; width: 120px; align-items: center;">
-                            <input type="number" id="peakTargetInput" value="0" min="0" step="20" style="width: 60px;">
-                            <button onclick="autoCalcPeakTarget()"
-                                style="margin: 0; padding: 4px 8px; width: auto; background: #6f42c1; font-size: 12px; height: 31px;">Auto</button>
+                        <div class="inline-input">
+                            <input type="number" id="peakTargetInput" value="0" min="0" step="20">
+                            <button type="button" class="btn-sm btn-bess" onclick="autoCalcPeakTarget()">Auto</button>
                         </div>
                     </div>
-                    <div class="control-group"
-                        style="align-items: flex-start; background: #f8f5ff; border: 1px solid #d6c9f0; border-radius: 6px; padding: 8px 10px; margin-top: 10px;">
-                        <label for="gridChargeInput" style="cursor: pointer; font-weight: bold; color: #4a2f7a;">🔌 Grid
-                            Charge<br><span style="font-weight:normal;font-size:11px;color:#888;">Charge battery from
+                    <div class="control-group toggle-row">
+                        <label for="gridChargeInput">🔌 Grid Charge<br><span class="hint">Charge battery from
                                 grid during Off-Peak (22:00–08:00)</span></label>
-                        <input type="checkbox" id="gridChargeInput" onchange="updateDashboard()"
-                            style="width: 20px; height: 20px; margin: 4px 0 0 0; cursor: pointer;">
+                        <input type="checkbox" id="gridChargeInput" onchange="updateDashboard()">
                     </div>
                 </div>
             </div>
 
-            <div style="display: flex; gap: 10px; max-width: 1020px; margin-top: 15px;">
-                <button id="calcBtn" onclick="updateDashboard()"
-                    style="background: #28a745; flex: 3; font-size: 16px; padding: 12px; margin-top: 0;">🧮 Calculate &
-                    Update Dashboard</button>
-                <button id="exportBtn" onclick="exportPage()"
-                    style="background: #0d6efd; flex: 2; font-size: 16px; padding: 12px; margin-top: 0;">📤 Export
-                    หน้านี้ (ส่งลูกค้า)</button>
-                <button id="printBtn" onclick="window.print()"
-                    style="background: #6c757d; flex: 1; font-size: 16px; padding: 12px; margin-top: 0;">🖨️
-                    PDF</button>
+            </div><!-- end input-layout -->
+
+            <div class="action-bar">
+                <button id="calcBtn" class="btn-primary" onclick="updateDashboard()">Run — คำนวณ &amp; อัปเดต</button>
+                <button type="button" class="btn-ghost" onclick="switchTab('tab-finance', event)">ดูผลลัพธ์ที่หน้า Finance →</button>
+            </div>
+        </div><!-- end tab-input -->
+
+        <!-- Tab 3: Finance -->
+        <div id="tab-finance" class="tab-page">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">Finance</h2>
+                    <p class="page-sub">ผลการวิเคราะห์ความคุ้มค่า · Solar only เทียบ Solar + BESS</p>
+                </div>
+                <div class="page-actions">
+                    <button id="exportBtn" class="btn-secondary" onclick="exportPage()">Export หน้านี้ (ส่งลูกค้า)</button>
+                    <button id="printBtn" class="btn-ghost" onclick="window.print()">PDF</button>
+                </div>
             </div>
 
             <div class="metrics">
@@ -529,23 +551,23 @@
                     <div class="metric-title">Production Energy / Year</div>
                     <div class="metric-value" id="prodYear">0 kWh</div>
                 </div>
-                <div class="metric-card" style="border-left-color: #28a745;">
+                <div class="metric-card">
                     <div class="metric-title">Energy Saving / Month</div>
                     <div class="metric-value" id="saveMonth">0 ฿</div>
                 </div>
-                <div class="metric-card" style="border-left-color: #fd7e14;">
+                <div class="metric-card">
                     <div class="metric-title">Total Revenue / Year</div>
                     <div class="metric-value" id="saveYear">0 ฿</div>
                 </div>
-                <div class="metric-card" style="border-left-color: #6f42c1;">
+                <div class="metric-card">
                     <div class="metric-title">Self-Consumption Rate</div>
                     <div class="metric-value" id="selfCons">0%</div>
                 </div>
-                <div class="metric-card" style="border-left-color: #17a2b8;">
+                <div class="metric-card">
                     <div class="metric-title">Payback Period</div>
                     <div class="metric-value" id="payback">0 ปี 0 เดือน</div>
                 </div>
-                <div class="metric-card" style="border-left-color: #20c997;">
+                <div class="metric-card">
                     <div class="metric-title">Carbon Credit (CO2)</div>
                     <div class="metric-value" id="carbon">0 Tons/Year</div>
                 </div>
@@ -553,7 +575,7 @@
 
             <!-- Scenario Comparison Table -->
             <div class="calculation-details">
-                <h3>⚖️ System Comparison (Solar Only vs Solar + BESS)</h3>
+                <h3>Solar only vs Solar + BESS <span class="chip">BESS scenario</span></h3>
                 <div class="pvsyst-table-container">
                     <table class="pvsyst-table" id="comparisonTable">
                         <thead>
@@ -608,7 +630,7 @@
 
             <!-- PVSyst Balances Table -->
             <div class="calculation-details">
-                <h3>📊 Balances and main results (PVSyst-style)</h3>
+                <h3>Balances and main results <span class="chip">PVSyst-style</span></h3>
                 <div class="pvsyst-table-container">
                     <table class="pvsyst-table" id="pvsystTable">
                         <thead>
@@ -626,7 +648,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                <p class="legend-note">
                     <b>Legends:</b><br>
                     GlobInc: Global incident irradiation in coll. plane (from PVGIS)<br>
                     T_Amb: Ambient Temperature (from PVGIS)<br>
@@ -636,60 +658,38 @@
                 </p>
             </div>
 
-            <div class="calculation-details"
-                style="background: #f8fafc; border-left: 4px solid #10b981; border-radius: 8px; padding: 18px 20px;">
-                <h3
-                    style="margin: 0 0 14px 0; color: #0f172a; font-size: 16px; display: flex; align-items: center; gap: 8px;">
-                    <span>💰</span> สรุปผลประหยัดเฉลี่ยต่อเดือน (Monthly Savings Breakdown)
-                </h3>
-                <div
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 4px;">
-                    <div
-                        style="background: #ffffff; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">☀️ ผลประหยัดจาก Solar โดยตรง
-                        </div>
-                        <div id="monthlySolarDirect" style="font-size: 18px; font-weight: bold; color: #0284c7;">฿0 /
-                            เดือน</div>
-                        <div id="monthlySolarDirectUnit" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">0
-                            kWh/เดือน</div>
+            <div class="calculation-details">
+                <h3>Monthly savings breakdown <span class="chip">฿ / เดือน</span></h3>
+                <div class="savings-grid">
+                    <div class="savings-card">
+                        <div class="label">☀️ ผลประหยัดจาก Solar โดยตรง</div>
+                        <div id="monthlySolarDirect" class="value" style="color: #58A6FF;">฿0 / เดือน</div>
+                        <div id="monthlySolarDirectUnit" class="sub">0 kWh/เดือน</div>
                     </div>
-                    <div
-                        style="background: #ffffff; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">🔋 ผลประหยัดจาก BESS Arbitrage
-                        </div>
-                        <div id="monthlyBessArbitrage" style="font-size: 18px; font-weight: bold; color: #7c3aed;">฿0 /
-                            เดือน</div>
-                        <div id="monthlyBessUnit" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">
-                            จ่ายกะกลางวัน vs ชาร์จกะดึก</div>
+                    <div class="savings-card">
+                        <div class="label">🔋 ผลประหยัดจาก BESS Arbitrage</div>
+                        <div id="monthlyBessArbitrage" class="value" style="color: #A78BFA;">฿0 / เดือน</div>
+                        <div id="monthlyBessUnit" class="sub">จ่ายกะกลางวัน vs ชาร์จกะดึก</div>
                     </div>
-                    <div
-                        style="background: #ffffff; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">📉 ผลประหยัด Peak Demand
-                            Charge</div>
-                        <div id="monthlyDemandSaving" style="font-size: 18px; font-weight: bold; color: #ea580c;">฿0 /
-                            เดือน</div>
-                        <div id="monthlyDemandKw" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">ลด Peak ได้
-                            0.0 kW</div>
+                    <div class="savings-card">
+                        <div class="label">📉 ผลประหยัด Peak Demand Charge</div>
+                        <div id="monthlyDemandSaving" class="value" style="color: #FB923C;">฿0 / เดือน</div>
+                        <div id="monthlyDemandKw" class="sub">ลด Peak ได้ 0.0 kW</div>
                     </div>
-                    <div
-                        style="background: #ecfdf5; padding: 14px; border-radius: 8px; border: 1px solid #a7f3d0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #065f46; font-weight: 600; margin-bottom: 4px;">✨
-                            ผลประหยัดรวมเฉลี่ยต่อเดือน</div>
-                        <div id="monthlyTotalSaving" style="font-size: 20px; font-weight: bold; color: #059669;">฿0 /
-                            เดือน</div>
-                        <div id="monthlyAnnualProjection" style="font-size: 11px; color: #047857; margin-top: 2px;">
-                            รวมทั้งปี: ฿0 / ปี</div>
+                    <div class="savings-card is-total">
+                        <div class="label">✨ ผลประหยัดรวมเฉลี่ยต่อเดือน</div>
+                        <div id="monthlyTotalSaving" class="value">฿0 / เดือน</div>
+                        <div id="monthlyAnnualProjection" class="sub">รวมทั้งปี: ฿0 / ปี</div>
                     </div>
                 </div>
             </div>
 
         </div><!-- end tab-finance -->
 
-        <!-- Tab 3: Plant Report -->
+        <!-- Tab 4: Plant Report -->
         <div id="tab-plant" class="tab-page">
-            <div id="plant-status"
-                style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:15px;margin-bottom:20px;color:#856404;">
-                ⚠️ ยังไม่มีข้อมูล Plant Report — กรุณาอัพโหลดไฟล์ Plant Report Excel ในแท็บ <b>💰 Finance</b>
+            <div id="plant-status" class="alert alert-warn">
+                ยังไม่มีข้อมูล Plant Report — กรุณาอัพโหลดไฟล์ Plant Report Excel ในแท็บ <b>Input Data</b>
                 เพื่อดูกราฟในหน้านี้
             </div>
             <div id="plant-metrics" class="metrics" style="display:none;"></div>
@@ -701,7 +701,7 @@
             <div id="plant-chart-bess" class="plant-chart" style="display:none;"></div>
         </div><!-- end tab-plant -->
 
-    </div>
+    </main>
 
     <script src="app.js"></script>
 </body>
