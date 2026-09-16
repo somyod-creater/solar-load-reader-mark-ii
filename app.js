@@ -514,7 +514,7 @@
             const inverterType = document.getElementById('inverterType').value;
             const isHybrid = (inverterType === 'hybrid');
             const batCap = isHybrid ? (parseFloat(document.getElementById('batCapInput').value) || 0) : 0;
-            const batPower = isHybrid ? invLimit : 0;
+            const batPower = isHybrid ? (parseFloat(document.getElementById('pcsInput').value) || 0) : 0;
             const batCost = isHybrid ? (parseFloat(document.getElementById('batCostInput').value) || 0) : 0;
             const allowGridCharge = isHybrid ? document.getElementById('gridChargeInput').checked : false;
             const dod = isHybrid ? Math.min(Math.max(parseFloat(document.getElementById('dodInput').value) || 80, 0), 100) : 100;
@@ -983,7 +983,7 @@
             const inverterType = document.getElementById('inverterType').value;
             const isHybrid = (inverterType === 'hybrid');
             const batCap = isHybrid ? (parseFloat(document.getElementById('batCapInput').value) || 0) : 0;
-            const batPower = isHybrid ? invLimit : 0;
+            const batPower = isHybrid ? (parseFloat(document.getElementById('pcsInput').value) || 0) : 0;
 
             if (batCap <= 0 || batPower <= 0) {
                 alert("Please specify Battery Capacity and Max Power first!");
