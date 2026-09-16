@@ -358,6 +358,11 @@
                     bess_discharge_curve[k] = 0; soc_percent_curve[k] = 0;
                 }
                 for (let i = 0; i < n; i++) {
+                    // With no load, each day is simulated independently starting from empty (see
+                    // hasLoad above) - a multi-day view (e.g. Weekly's 7x24 slots) would otherwise
+                    // let the battery fill up once early on and then sit full/idle for the rest of
+                    // the days shown, understating what a typical day can actually charge.
+                    if (!hasLoad && i % 24 === 0) soc = socFloor;
                     const s_dc = (invLimit > 0) ? Math.min(solar_dc_curve[i], invLimit) : solar_dc_curve[i]; // Capped at inverter limit for Ideal simple view
                     const l = load_curve[i];
                     const h = hours[i];
