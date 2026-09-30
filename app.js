@@ -1947,6 +1947,36 @@
             });
         }
 
+        // --- Current (Amp) load file: its own dropzone, separate from the Excel one ---
+        const currentDropzone = document.getElementById('currentDropzone');
+        const currentFileInput = document.getElementById('currentFileInput');
+
+        if (currentDropzone && currentFileInput) {
+            currentDropzone.addEventListener('click', (e) => {
+                if (e.target.tagName && e.target.tagName.toLowerCase() === 'button') return;
+                currentFileInput.click();
+            });
+            currentDropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                currentDropzone.classList.add('dragover');
+            });
+            currentDropzone.addEventListener('dragleave', () => {
+                currentDropzone.classList.remove('dragover');
+            });
+            currentDropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                currentDropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) proceedWithLoadUpload(e.dataTransfer.files, true);
+            });
+            currentFileInput.addEventListener('click', (e) => e.stopPropagation());
+            currentFileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    proceedWithLoadUpload(e.target.files, true);
+                    currentFileInput.value = '';
+                }
+            });
+        }
+
         // --- PVSyst Simulation (E_Grid) Upload & Parsing ---
         const pvsystDropzone = document.getElementById('pvsystDropzone');
         const pvsystFileInput = document.getElementById('pvsystFileInput');
@@ -2275,7 +2305,7 @@
 
             if (!hasPVSyst) {
                 if (statusEl) {
-                    statusEl.innerHTML = `ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้สูตรคำนวณมาตรฐาน kWp × PSH)`;
+                    statusEl.innerHTML = `ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้ข้อมูลแสง PVGIS รายชั่วโมง)`;
                     statusEl.style.background = '#fef9c3';
                     statusEl.style.color = '#854d0e';
                     statusEl.style.borderColor = '#fef08a';
@@ -2377,6 +2407,8 @@
         // PVSyst data (if any) is left untouched.
         function clearLoadData() {
             lastAmpConversion = null;
+            const curStatus = document.getElementById('currentStatus');
+            if (curStatus) curStatus.innerHTML = 'ยังไม่ได้นำเข้าไฟล์กระแส';
             rawDataPoints = [];
             lastUploadedFiles = [];
             fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
@@ -2492,7 +2524,9 @@
             return isNaN(d.getTime()) ? null : d;
         }
 
-        function convertCurrentGridToKw(grid) {
+        // declaredCurrentFile: the file came from the current-file dropzone, so the user
+        // has already said the values are Amps. Outside that zone this is never called.
+        function convertCurrentGridToKw(grid, declaredCurrentFile) {
             if (!grid || grid.length < 2) return null;
             const { voltage, pf } = getAmpConversionSettings();
 
@@ -2518,8 +2552,10 @@
                     if (idx === timeIdx) return;
                     const hasAmpUnit = AMP_SUFFIX_RE.test(c);
                     const bare = c.replace(AMP_SUFFIX_RE, '').trim();
-                    // I1/I2/I3 stand alone; a bare phase name must be marked as Amp.
-                    if (CURRENT_NAME_RE.test(bare) || (hasAmpUnit && PHASE_NAME_RE.test(bare))) {
+                    // I1/I2/I3 stand alone. L1/Ph2/Phase A name only a phase, so they
+                    // need either an Amp unit or the user's word that this is a current file.
+                    if (CURRENT_NAME_RE.test(bare) ||
+                        ((hasAmpUnit || declaredCurrentFile) && PHASE_NAME_RE.test(bare))) {
                         directCols.push({ idx, name: bare.toUpperCase() });
                     }
                 });
@@ -2544,7 +2580,9 @@
                             const val = parseFloat(row[t.valIdx]);
                             if (!name || !isFinite(val)) return;
                             // Only current channels: unit says Amp, or the name looks like I1/L2/…
-                            if (!(AMP_UNIT_RE.test(unit) || (unit === '' && CURRENT_NAME_RE.test(name)))) return;
+                            const namedAsCurrent = CURRENT_NAME_RE.test(name) ||
+                                (declaredCurrentFile && PHASE_NAME_RE.test(name));
+                            if (!(AMP_UNIT_RE.test(unit) || (unit === '' && namedAsCurrent))) return;
                             readings.push({ name: name.toUpperCase(), val });
                         });
                     }
@@ -2613,7 +2651,7 @@
             processDataPoints(rawDataPoints, lastUploadedFiles || []);
         }
 
-        function proceedWithLoadUpload(files) {
+        function proceedWithLoadUpload(files, isCurrentUpload) {
             let filesLoaded = 0;
             fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
             fusionLoadIsGrid = false;
@@ -2625,10 +2663,12 @@
             let directNetLoadByTime = {};
             let directNetPhaseHeaders = [];
             let fileAmpMeta = null;
+            let ampConversionFailed = false;
             isBatchImporting = true;
 
             // Show loading status
-            document.getElementById('uploadStatus').innerHTML = `⏳ Loading ${files.length} file(s)...`;
+            const progressBoxId = isCurrentUpload ? 'currentStatus' : 'uploadStatus';
+            document.getElementById(progressBoxId).innerHTML = `⏳ Loading ${files.length} file(s)...`;
 
 
             for (let i = 0; i < files.length; i++) {
@@ -2645,12 +2685,21 @@
                         // Convert sheet to 2D array
                         let grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
 
-                        // Current (Amp) file? Rewrite it as [Time, Load (kW), I1 (A), …]
-                        // so the header detection and row loop below handle it as usual.
-                        const ampConverted = convertCurrentGridToKw(grid);
-                        if (ampConverted) {
-                            grid = ampConverted.grid;
-                            fileAmpMeta = ampConverted.meta;
+                        // Only the dedicated current-file dropzone converts Amp to kW.
+                        // The normal load path never guesses at it, so a kW file whose
+                        // columns happen to be named per phase can't be mangled.
+                        if (isCurrentUpload) {
+                            const ampConverted = convertCurrentGridToKw(grid, true);
+                            if (!ampConverted) {
+                                // Dropped in the current-file zone but holds no current
+                                // columns. Falling back to the kW parser would import it
+                                // silently under the wrong heading, so stop and say so.
+                                ampConversionFailed = true;
+                                grid = [];
+                            } else {
+                                grid = ampConverted.grid;
+                                fileAmpMeta = ampConverted.meta;
+                            }
                         }
 
                         // Find header row and map columns
@@ -2907,7 +2956,7 @@
                     }
 
                     filesLoaded++;
-                    document.getElementById('uploadStatus').innerHTML = `â³ Loaded ${filesLoaded}/${files.length} file(s)...`;
+                    document.getElementById(progressBoxId).innerHTML = `⏳ Loaded ${filesLoaded}/${files.length} file(s)...`;
                     if (filesLoaded === files.length) {
                         plantReportData = (importedRowsAll.length > 0)
                             ? { headers: importedHeadersAll.filter(h => h), rows: importedRowsAll }
@@ -2940,8 +2989,14 @@
 
                         if (newPoints.length === 0) {
                             isBatchImporting = false;
-                            document.getElementById('uploadStatus').innerHTML = `❌ Could not read valid data from the selected file(s)`;
-                            alert("ไม่พบข้อมูลโหลดหรือคอลัมน์ 'Statistical period' และ 'Consumption (kWh)' ในไฟล์ที่เลือก!");
+                            if (isCurrentUpload || ampConversionFailed) {
+                                document.getElementById('currentStatus').innerHTML =
+                                    `❌ ไม่พบคอลัมน์กระแสในไฟล์นี้ — ต้องมีคอลัมน์เวลา (updated_at / Timestamp / Date / Time) ` +
+                                    `และช่องกระแสรายเฟส (I1 / I2 / I3, L1 / L2 / L3 หรือรูปแบบ Sensor Name / Value / Unit ที่หน่วยเป็น Amp)`;
+                            } else {
+                                document.getElementById('uploadStatus').innerHTML = `❌ Could not read valid data from the selected file(s)`;
+                                alert("ไม่พบข้อมูลโหลดหรือคอลัมน์ 'Statistical period' และ 'Consumption (kWh)' ในไฟล์ที่เลือก!");
+                            }
                             return;
                         }
 
@@ -3058,7 +3113,7 @@
             const minDate = points[0].datetime.toLocaleDateString();
             const maxDate = points[points.length - 1].datetime.toLocaleDateString();
             const fileNames = Array.from(files).map(f => f.name).join(', ');
-            document.getElementById('uploadStatus').innerHTML = `
+            document.getElementById(lastAmpConversion ? 'currentStatus' : 'uploadStatus').innerHTML = `
                 <div style="color: #155724; font-weight: bold; margin-bottom: 5px; background: #d4edda; border: 1px solid #c3e6cb; padding: 6px; border-radius: 4px;">✅ Data loaded successfully!</div>
                 📄 File: <span style="font-family: monospace; font-size: 11px;">${fileNames}</span><br>
                 📅 Data Period: <b>${minDate}</b> to <b>${maxDate}</b> (${points.length.toLocaleString()} rows)<br>

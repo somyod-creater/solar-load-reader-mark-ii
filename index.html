@@ -326,7 +326,7 @@
                         <div id="dropzone" class="dropzone">
                             <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path><path d="M8 13h8M8 17h5"></path></svg></span>
                             <p class="dropzone-title">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
-                            <p class="dropzone-sub">รายงานโหลดรายชั่วโมง / 15 นาที / 1 นาที · รองรับไฟล์กระแส (Amp) ด้วย · อัพโหลดทีละหลายไฟล์ได้</p>
+                            <p class="dropzone-sub">รายงานโหลดหน่วย kW / kWh · รายชั่วโมง หรือ 15 นาที · อัพโหลดทีละหลายไฟล์ได้</p>
                             <button type="button" class="btn-browse-file" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
                         </div>
                         <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
@@ -339,12 +339,28 @@
                                 ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Current (Amp) load file - separate from the Excel kW import -->
+                <div class="panel">
+                    <h4><span class="accent" style="background: #A78BFA;"></span>ไฟล์กระแสรายเฟส (Amp)</h4>
+                    <div class="upload-body">
+                        <div id="currentDropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4.09 12.97a1 1 0 0 0 .77 1.63h6.14l-1 7.4 8.9-10.97a1 1 0 0 0-.77-1.63h-6.14z"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์กระแส (.csv / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p class="dropzone-sub">ข้อมูลกระแสรายเฟส I1 / I2 / I3 · ระบบจะแปลงเป็น kW ให้ด้วยค่าด้านล่าง</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('currentFileInput').click();">⚡ คลิกเลือกไฟล์กระแส</button>
+                        </div>
+                        <input type="file" id="currentFileInput" accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <div>
+                            <div id="currentStatus" class="status-box">ยังไม่ได้นำเข้าไฟล์กระแส</div>
+                        </div>
 
                         <div>
-                            <div class="panel-section-title">แปลงกระแส (Amp) เป็นกำลังไฟ (kW)</div>
+                            <div class="panel-section-title">ค่าสำหรับแปลง Amp → kW</div>
                             <p class="dropzone-sub" style="text-align: left; margin: 0 0 6px;">
-                                ใช้เมื่อไฟล์โหลดบันทึกเป็น <b>กระแสรายเฟส</b> (I1 / I2 / I3) — ระบบจะแปลงเป็น kW ให้อัตโนมัติด้วยค่าด้านล่าง
-                                (P = &radic;3 &times; V &times; I<sub>เฉลี่ย</sub> &times; PF)
+                                P = &radic;3 &times; V &times; I<sub>เฉลี่ย</sub> &times; PF · แก้ค่าแล้วคำนวณใหม่ทันที ไม่ต้องอัพโหลดซ้ำ
                             </p>
                             <div class="control-group">
                                 <label for="sysVoltageInput">แรงดันระบบ (V)<span class="hint">Line-to-line · 3 เฟส 4 สาย ทั่วไป = 400</span></label>
@@ -376,7 +392,7 @@
                             <!-- background/color/border are toggled by app.js (updatePVSystUI) -->
                             <div id="pvsystStatus" class="status-box"
                                 style="background: #fef9c3;">
-                                ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้สูตรคำนวณมาตรฐาน kWp × PSH)
+                                ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้ข้อมูลแสง PVGIS รายชั่วโมง)
                             </div>
                             <div id="pvsystInfoBox" class="info-box">
                                 <div class="info-box-head">
