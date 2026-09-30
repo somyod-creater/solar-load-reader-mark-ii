@@ -1666,6 +1666,9 @@
             const layout = LAYOUT_7();
             const periodLabel = netLoadPeriod.charAt(0).toUpperCase() + netLoadPeriod.slice(1);
             const solarSourceLabel = isUsingPVSyst ? 'PVSyst Simulation E_Grid' : `Designed Solar (${designedKwp} kWp)`;
+            // baseLabel was referenced here but never declared, so drawing this chart threw
+            // a ReferenceError. The baseline is whichever column the net load was built from.
+            const baseLabel = importCol || consumptionCol || 'Load';
             layout.title = chartTitle('Imported Net Load', `${periodLabel} average · Net Load = ${baseLabel} − ${solarSourceLabel}`);
             layout.xaxis.type = 'category';
             layout.xaxis.categoryorder = 'array';
@@ -1682,7 +1685,6 @@
         Object.keys(data.months).forEach(m => {
             traces.push({ x: times, y: data.months[m], mode: 'lines', name: `${monthsAreSolar ? 'Solar' : 'Avg Load'} - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
         });
-        traces.push({ x: times, y: Array(times.length).fill(data.midday_min), mode: 'lines', name: `Base Size (${data.midday_min.toFixed(1)} kW)`, line: { shape: 'spline', color: 'green', width: 2, dash: 'dash' } });
 
         let solarTraceIndex = traces.length;
         traces.push({
@@ -3579,7 +3581,6 @@
             Object.keys(data.months).forEach(m => {
                 traces1.push({ x: times, y: data.months[m], mode: 'lines', name: `${monthsAreSolar ? 'Solar' : 'Avg Load'} - ${m}`, line: { shape: 'spline', width: 2 }, visible: 'legendonly' });
             });
-            traces1.push({ x: times, y: Array(times.length).fill(data.midday_min), mode: 'lines', name: `Base Size (${data.midday_min.toFixed(1)} kW)`, line: { shape: 'spline', color: 'green', width: 2, dash: 'dash' } });
 
             // Placeholder trace for solar curve (to be restyled by updateDashboard)
             traces1.push({
