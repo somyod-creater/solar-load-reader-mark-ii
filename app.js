@@ -538,7 +538,10 @@
             // The profile can span more than one day (weekly = 7 days, monthly ≈ 30). Summed energies
             // below are therefore per-profile; divide by this to get true per-DAY figures so every
             // "kWh/Day" label and ×365 annual projection stays correct in every view.
-            const daysInProfile = netLoadPeriod === 'weekly' ? 7 : (netLoadPeriod === 'monthly' ? 30 : 1);
+            const daysInProfile = netLoadPeriod === 'weekly' ? 7
+                : netLoadPeriod === 'monthly' ? 30
+                    : netLoadPeriod === 'actual' ? Math.max(1, actualDayCount)
+                        : 1;
 
             const isUsingPVSyst = (activeSolarSource === 'pvsyst' && importedPVSystData);
             const isComparing = (activeSolarSource === 'compare' && importedPVSystData);
@@ -1166,7 +1169,7 @@
             if (period === 'monthly') {
                 return { tickmode: 'array', tickvals: timeArray, ticktext: timeArray, tickangle: 0 };
             }
-            if (period === 'weekly') {
+            if (period === 'weekly' || period === 'actual') {
                 // Show every 6 or 12 hours to keep labels distinct and readable
                 var weeklyTicks = timeArray.filter(function (t) {
                     return t.includes('00:00') || t.includes('06:00') || t.includes('12:00') || t.includes('18:00');
@@ -1316,6 +1319,7 @@
 
         let netLoadPeriod = 'daily';
         let lastNetLoadRenderData = null;
+        let actualDayCount = 1;   // distinct calendar days held by the loaded profile
 
         function emptyImportedNetLoadChart(message) {
             updateNetLoadPeriodButtons();
@@ -1343,6 +1347,7 @@
 
         function setNetLoadPeriod(period) {
             netLoadPeriod = period;
+            actualSlotOrder = {};
             updateNetLoadPeriodButtons();
             if (rawDataPoints && rawDataPoints.length > 0) {
                 processDataPoints(rawDataPoints, lastUploadedFiles || []);
@@ -1418,7 +1423,40 @@
             return `${labels[date.getDay()]} ${timeStr}`;
         }
 
+        // "Actual" view: one slot per real calendar day, labelled with the weekday AND
+        // the date, so the days stay in the order they were recorded. The weekly view
+        // buckets by weekday instead, which rotates the week to start on Monday and
+        // drops any weekday the file never covered.
+        function actualSlotLabel(date, timeStr) {
+            const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            return `${labels[date.getDay()]} ${dd}/${mm} ${timeStr}`;
+        }
+
+        // Labels carry no year, so chronological order is remembered here as each slot
+        // is created rather than inferred from the text.
+        let actualSlotOrder = {};
+
+        function profileSlotLabel(date, timeStr) {
+            if (netLoadPeriod === 'weekly') return weeklySlotLabel(date, timeStr);
+            if (netLoadPeriod === 'actual') {
+                const label = actualSlotLabel(date, timeStr);
+                const t = date.getTime();
+                if (actualSlotOrder[label] === undefined || t < actualSlotOrder[label]) {
+                    actualSlotOrder[label] = t;
+                }
+                return label;
+            }
+            return timeStr;
+        }
+
         function sortProfileSlots(a, b) {
+            if (netLoadPeriod === 'actual') {
+                const oa = actualSlotOrder[a], ob = actualSlotOrder[b];
+                if (oa !== undefined && ob !== undefined) return oa - ob;
+                return a.localeCompare(b);
+            }
             if (netLoadPeriod !== 'weekly') return a.localeCompare(b);
             const order = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
             const [dayA, timeA] = a.split(' ');
@@ -1436,10 +1474,13 @@
         function aggregateImportedNetRows(rows, seriesCols, period) {
             const designedKwp = parseFloat(document.getElementById('kwpInput').value) || 0;
             const designedInvLimit = parseFloat(document.getElementById('invInput').value) || 0;
-            const designedPeakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
+            // Same measured PVGIS profile the main solar curve uses; this was still on
+            // the old half-sine after that switch, so the Net Load chart disagreed with
+            // chart 1 about how much the designed array makes at a given hour.
             const designedSolarAtHour = (hour) => {
-                if (hour < SOLAR_SUNRISE || hour >= SOLAR_SUNSET || designedKwp <= 0) return 0;
-                const dc = designedKwp * designedPeakFactor * Math.sin(Math.PI * (hour - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
+                if (designedKwp <= 0) return 0;
+                const res = getPvgisResource();
+                const dc = res ? designedKwp * solarPerKwpAtHour(res.profile, hour) : 0;
                 return designedInvLimit > 0 ? Math.min(dc, designedInvLimit) : dc;
             };
 
@@ -1449,9 +1490,9 @@
                 if (isNaN(d.getTime())) return;
                 let key;
                 let xValue;
-                if (period === 'weekly') {
+                if (period === 'weekly' || period === 'actual') {
                     const clock = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                    key = weeklySlotLabel(d, clock);
+                    key = profileSlotLabel(d, clock);
                     xValue = key;
                 } else if (period === 'monthly') {
                     const keyDate = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -1528,7 +1569,6 @@
             // (chart1/3/4/5), so every chart in the app is consistent.
             const designedKwp = parseFloat(document.getElementById('kwpInput').value) || 0;
             const designedInvLimit = parseFloat(document.getElementById('invInput').value) || 0;
-            const designedPeakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
             const isUsingPVSyst = (activeSolarSource === 'pvsyst' || activeSolarSource === 'compare') && importedPVSystData;
             const designedSolarAtHour = (hour) => {
                 if (isUsingPVSyst) {
@@ -1536,8 +1576,11 @@
                     const dc = importedPVSystData.hourlyMeanProfile[hFloor] || 0;
                     return designedInvLimit > 0 ? Math.min(dc, designedInvLimit) : dc;
                 }
-                if (hour < SOLAR_SUNRISE || hour >= SOLAR_SUNSET || designedKwp <= 0) return 0;
-                const dc = designedKwp * designedPeakFactor * Math.sin(Math.PI * (hour - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
+                // was still the old half-sine after the PVGIS switch, so this chart
+                // disagreed with chart 1 about the designed array's hourly output
+                if (designedKwp <= 0) return 0;
+                const res = getPvgisResource();
+                const dc = res ? designedKwp * solarPerKwpAtHour(res.profile, hour) : 0;
                 return designedInvLimit > 0 ? Math.min(dc, designedInvLimit) : dc;
             };
 
@@ -1547,7 +1590,7 @@
                 const d = new Date(r.time);
                 if (isNaN(d.getTime())) return;
                 const clock = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                const slot = netLoadPeriod === 'weekly' ? weeklySlotLabel(d, clock) : clock;
+                const slot = profileSlotLabel(d, clock);
                 const month = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
                 // Raw values straight from the sheet — no derived logic
                 const consumptionVal = consumptionCol ? Number(r.vals[consumptionCol] ?? 0) : 0;
@@ -3027,7 +3070,7 @@
                 const hr = dt.getHours();
                 const min = dt.getMinutes();
                 const clockStr = `${hr.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-                const timeStr = netLoadPeriod === 'weekly' ? weeklySlotLabel(dt, clockStr) : clockStr;
+                const timeStr = profileSlotLabel(dt, clockStr);
 
                 const monthStr = `${dt.getFullYear()}-${(dt.getMonth() + 1).toString().padStart(2, '0')}`;
 
@@ -3045,6 +3088,11 @@
                     middayValues.push(p.kw);
                 }
             });
+
+            actualDayCount = new Set(points.map(p => {
+                const d = p.datetime;
+                return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            })).size || 1;
 
             const time_strs = Object.keys(timeGroups).sort(sortProfileSlots);
 
@@ -3255,8 +3303,8 @@
                     var clockStr = hr.toString().padStart(2, '0') + ':' + min.toString().padStart(2, '0');
 
                     var timeStr;
-                    if (netLoadPeriod === 'weekly') {
-                        timeStr = weeklySlotLabel(dt, clockStr);
+                    if (netLoadPeriod === 'weekly' || netLoadPeriod === 'actual') {
+                        timeStr = profileSlotLabel(dt, clockStr);
                     } else if (netLoadPeriod === 'monthly') {
                         timeStr = dt.getFullYear() + '-' + (dt.getMonth() + 1).toString().padStart(2, '0');
                     } else {
@@ -3273,7 +3321,7 @@
                 }
 
                 var time_strs = Object.keys(timeGroups).sort(function (a, b) {
-                    if (netLoadPeriod === 'weekly') return sortProfileSlots(a, b);
+                    if (netLoadPeriod === 'weekly' || netLoadPeriod === 'actual') return sortProfileSlots(a, b);
                     return a.localeCompare(b);
                 });
 
@@ -3301,7 +3349,7 @@
                     title: '<b>FusionSolar Aggregated Profile (' + periodLabel + ')</b>',
                     xaxis: Object.assign({ title: xTitle }, xTickConfig),
                     yaxis: { title: 'Average Power (kW)' },
-                    margin: { l: 50, r: 20, t: 40, b: (netLoadPeriod === 'weekly' ? 80 : 60) },
+                    margin: { l: 50, r: 20, t: 40, b: ((netLoadPeriod === 'weekly' || netLoadPeriod === 'actual') ? 90 : 60) },
                     paper_bgcolor: '#ffffff',
                     plot_bgcolor: '#f8f9fa',
                     legend: { orientation: 'h', y: -0.2 },
