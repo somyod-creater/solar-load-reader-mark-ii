@@ -36,6 +36,7 @@
         const PSH = 4;                      // Peak Sun Hours (Thailand average)
         const SOLAR_SUNRISE = 6;
         const SOLAR_SUNSET = 18;
+        const SOLAR_PEAK_RATIO_DEFAULT = 0.80;  // midday power as a share of kWp (clear sky, after losses)
         const PEAK_SHAVE_SEARCH_MAX = 2500;
         const PEAK_SHAVE_STEP = 5;
         const arrayMax = arr => (arr && arr.length > 0) ? arr.reduce((a, b) => Math.max(a, b), -Infinity) : 0;
@@ -315,6 +316,65 @@
             updateDashboard();
         }
 
+        // ===================== Daily solar shape =====================
+        // The modelled day is sinⁿ across the daylight window, scaled so that
+        //   peak  = peakRatio × kWp        (what the inverter actually sees at noon)
+        //   area  = PSH × kWp              (unchanged — the energy the financials use)
+        // The old curve was a plain half-sine (n = 1), which pins the peak at
+        // PSH·π / (2 · window) = 52% of kWp no matter how large the array is. That
+        // sits below any sensibly sized inverter, so clipping could never appear:
+        // 150 kWp on a 100 kW inverter peaked at 78.5 kW instead of clipping at 100.
+        // Raising n keeps the same daily energy but concentrates it around noon,
+        // where a real array does peak.
+
+        // (1/π)·∫₀^π sinⁿ(x) dx by Simpson's rule
+        function sinPowerMean(n) {
+            const N = 2000;
+            let sum = 0;
+            for (let i = 0; i <= N; i++) {
+                const w = (i === 0 || i === N) ? 1 : (i % 2 ? 4 : 2);
+                sum += w * Math.pow(Math.sin(Math.PI * i / N), n);
+            }
+            return sum / (3 * N);
+        }
+
+        let _solarShapeCache = { ratio: null, n: 1 };
+        function getSolarShapeExponent(peakRatio) {
+            if (_solarShapeCache.ratio === peakRatio) return _solarShapeCache.n;
+            const target = PSH / (peakRatio * (SOLAR_SUNSET - SOLAR_SUNRISE));
+            let n = 1;
+            if (target > 0 && target < 1) {
+                let lo = 0.05, hi = 40;
+                for (let i = 0; i < 60; i++) {
+                    const mid = (lo + hi) / 2;
+                    if (sinPowerMean(mid) > target) lo = mid; else hi = mid;
+                }
+                n = (lo + hi) / 2;
+            }
+            _solarShapeCache = { ratio: peakRatio, n };
+            return n;
+        }
+
+        function getSolarPeakRatio() {
+            const el = document.getElementById('solarPeakRatioInput');
+            const v = parseFloat(el && el.value);
+            const pct = isFinite(v) ? v / 100 : SOLAR_PEAK_RATIO_DEFAULT;
+            // Below PSH/window a peak that low cannot hold the day's energy; above
+            // ~95% of kWp is not physically reachable after temperature losses.
+            const floor = (PSH / (SOLAR_SUNSET - SOLAR_SUNRISE)) * 1.05;
+            return Math.min(0.95, Math.max(floor, pct));
+        }
+
+        function buildSolarDcCurve(kwp, hoursArr) {
+            const peakRatio = getSolarPeakRatio();
+            const n = getSolarShapeExponent(peakRatio);
+            const span = SOLAR_SUNSET - SOLAR_SUNRISE;
+            return hoursArr.map(h => {
+                if (h < SOLAR_SUNRISE || h >= SOLAR_SUNSET) return 0;
+                return kwp * peakRatio * Math.pow(Math.sin(Math.PI * (h - SOLAR_SUNRISE) / span), n);
+            });
+        }
+
         function simulateBESS(peakTarget, batCap, batPower, invLimit, is_tou, allowGridCharge, dod, solar_dc_curve, load_curve, hours, interval_hours) {
             const batEff = 1.00; // Ideal efficiency for simple customer understanding
             const chargeEff = Math.sqrt(batEff);
@@ -453,11 +513,7 @@
             const isComparing = (activeSolarSource === 'compare' && importedPVSystData);
 
             // 1. Formula calculation (ideal sine wave)
-            const peakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
-            const formula_dc_curve = hours.map(h => {
-                if (h < SOLAR_SUNRISE || h >= SOLAR_SUNSET) return 0;
-                return kwp * peakFactor * Math.sin(Math.PI * (h - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
-            });
+            const formula_dc_curve = buildSolarDcCurve(kwp, hours);
             const formula_curve = formula_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
 
             // 2. PVSyst hourly simulation profile (if imported)
@@ -994,11 +1050,7 @@
             }
 
             const interval_hours = (hours.length > 1) ? (hours[1] - hours[0]) : 0.25;
-            const peakFactor = PSH * Math.PI / (2 * (SOLAR_SUNSET - SOLAR_SUNRISE));
-            const solar_dc_curve = hours.map(h => {
-                if (h < SOLAR_SUNRISE || h >= SOLAR_SUNSET) return 0;
-                return kwp * peakFactor * Math.sin(Math.PI * (h - SOLAR_SUNRISE) / (SOLAR_SUNSET - SOLAR_SUNRISE));
-            });
+            const solar_dc_curve = buildSolarDcCurve(kwp, hours);
             const load_curve = data.overall_mean;
             const tariffVal = document.getElementById('tariffProfile').value;
             const tariffData = PEA_TARIFF_DATA[tariffVal];
