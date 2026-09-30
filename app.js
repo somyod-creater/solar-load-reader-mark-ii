@@ -1445,6 +1445,24 @@
             return netLoadPeriod === 'weekly' ? weeklySlotLabel(date, timeStr) : timeStr;
         }
 
+        // Every Mon-Sun slot at the profile's own resolution, labelled exactly as
+        // weeklySlotLabel() would label a real reading, so covered slots match up and
+        // the rest stay empty.
+        function buildFullWeekSlots(points) {
+            const clocks = Array.from(new Set(points.map(p => {
+                const d = p.datetime;
+                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            }))).sort();
+            if (clocks.length === 0) return [];
+            const week = [['Mon', 1], ['Tue', 2], ['Wed', 3], ['Thu', 4], ['Fri', 5], ['Sat', 6], ['Sun', 0]];
+            const slots = [];
+            week.forEach(([name, dayIdx]) => {
+                const suffix = weekdayDateSuffix[dayIdx] || '';
+                clocks.forEach(c => slots.push(`${name}${suffix} ${c}`));
+            });
+            return slots;
+        }
+
         function sortProfileSlots(a, b) {
             if (netLoadPeriod !== 'weekly') return a.localeCompare(b);
             const order = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
@@ -3081,10 +3099,17 @@
                 }
             });
 
-            const time_strs = Object.keys(timeGroups).sort(sortProfileSlots);
+            // Weekly always spans Mon-Sun. Using only the slots the file happens to
+            // cover squeezes a part week across the full width, so the days no longer
+            // line up with the grid and a missing weekday just vanishes. Build the whole
+            // week and leave uncovered slots at 0.
+            const time_strs = (netLoadPeriod === 'weekly')
+                ? buildFullWeekSlots(points)
+                : Object.keys(timeGroups).sort(sortProfileSlots);
 
-            const overall_mean = time_strs.map((t, i) => {
+            const overall_mean = time_strs.map(t => {
                 const vals = timeGroups[t];
+                if (!vals || vals.length === 0) return 0;
                 return vals.reduce((a, b) => a + b, 0) / vals.length;
             });
 
