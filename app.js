@@ -2466,7 +2466,12 @@
         }
 
         const AMP_UNIT_RE = /^(a|amp|amps|ampere|amperes)$/i;
-        const CURRENT_NAME_RE = /^(i|l|ph|phase)\s*[-_]?\s*[123abc]$/i;
+        // "I" is the symbol for current, so I1/I2/I3 identify a current channel on their
+        // own. L1/Ph2/Phase A only name a phase — the quantity could just as easily be
+        // volts or kW — so those need the unit to say Amp before anything is converted.
+        const CURRENT_NAME_RE = /^i\s*[-_]?\s*[123abc]$/i;
+        const PHASE_NAME_RE = /^(l|ph|phase)\s*[-_]?\s*[123abc]$/i;
+        const AMP_SUFFIX_RE = /[\(\[]\s*(a|amp|amps|ampere|amperes)\s*[\)\]]\s*$/i;
         const TIME_HEADER_RE = /updated[\s_]*at|timestamp|date\s*[\/_-]?\s*time|^date$|^time$|record[\s_]*time|^datetime$/i;
 
         function toDateCell(v) {
@@ -2510,9 +2515,11 @@
                 // --- Shape B: direct per-phase current columns ---
                 const directCols = [];
                 cells.forEach((c, idx) => {
-                    const bare = c.replace(/\s*\((a|amp|amps|ampere)\)\s*$/i, '').trim();
-                    const isAmpCol = /\((a|amp|amps|ampere)\)\s*$/i.test(c) || CURRENT_NAME_RE.test(bare);
-                    if (idx !== timeIdx && isAmpCol && CURRENT_NAME_RE.test(bare)) {
+                    if (idx === timeIdx) return;
+                    const hasAmpUnit = AMP_SUFFIX_RE.test(c);
+                    const bare = c.replace(AMP_SUFFIX_RE, '').trim();
+                    // I1/I2/I3 stand alone; a bare phase name must be marked as Amp.
+                    if (CURRENT_NAME_RE.test(bare) || (hasAmpUnit && PHASE_NAME_RE.test(bare))) {
                         directCols.push({ idx, name: bare.toUpperCase() });
                     }
                 });
