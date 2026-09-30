@@ -1931,7 +1931,7 @@
                 e.preventDefault();
                 dropzone.classList.remove('dragover');
                 if (e.dataTransfer.files.length > 0) {
-                    handleFileUpload(e.dataTransfer.files);
+                    handleFileUpload(Array.from(e.dataTransfer.files));
                 }
             });
 
@@ -1941,7 +1941,7 @@
 
             fileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
-                    handleFileUpload(e.target.files);
+                    handleFileUpload(Array.from(e.target.files));
                     fileInput.value = '';
                 }
             });
@@ -1966,12 +1966,12 @@
             currentDropzone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 currentDropzone.classList.remove('dragover');
-                if (e.dataTransfer.files.length > 0) proceedWithLoadUpload(e.dataTransfer.files, true);
+                if (e.dataTransfer.files.length > 0) proceedWithLoadUpload(Array.from(e.dataTransfer.files), true);
             });
             currentFileInput.addEventListener('click', (e) => e.stopPropagation());
             currentFileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
-                    proceedWithLoadUpload(e.target.files, true);
+                    proceedWithLoadUpload(Array.from(e.target.files), true);
                     currentFileInput.value = '';
                 }
             });
@@ -2002,7 +2002,7 @@
                 e.preventDefault();
                 pvsystDropzone.classList.remove('dragover');
                 if (e.dataTransfer.files.length > 0) {
-                    handlePVSystUpload(e.dataTransfer.files);
+                    handlePVSystUpload(Array.from(e.dataTransfer.files));
                 }
             });
 
@@ -2012,7 +2012,7 @@
 
             pvsystFileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
-                    handlePVSystUpload(e.target.files);
+                    handlePVSystUpload(Array.from(e.target.files));
                     pvsystFileInput.value = '';
                 }
             });
