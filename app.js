@@ -36,7 +36,7 @@
         const PSH = 4;                      // Peak Sun Hours (Thailand average)
         const SOLAR_SUNRISE = 6;
         const SOLAR_SUNSET = 18;
-        const SOLAR_PEAK_RATIO_DEFAULT = 0.80;  // midday power as a share of kWp (clear sky, after losses)
+        const PVGIS_UTC_OFFSET_H = 7;       // PVGIS stamps are UTC; the site is UTC+7
         const PEAK_SHAVE_SEARCH_MAX = 2500;
         const PEAK_SHAVE_STEP = 5;
         const arrayMax = arr => (arr && arr.length > 0) ? arr.reduce((a, b) => Math.max(a, b), -Infinity) : 0;
@@ -316,63 +316,94 @@
             updateDashboard();
         }
 
-        // ===================== Daily solar shape =====================
-        // The modelled day is sinⁿ across the daylight window, scaled so that
-        //   peak  = peakRatio × kWp        (what the inverter actually sees at noon)
-        //   area  = PSH × kWp              (unchanged — the energy the financials use)
-        // The old curve was a plain half-sine (n = 1), which pins the peak at
-        // PSH·π / (2 · window) = 52% of kWp no matter how large the array is. That
-        // sits below any sensibly sized inverter, so clipping could never appear:
-        // 150 kWp on a 100 kW inverter peaked at 78.5 kW instead of clipping at 100.
-        // Raising n keeps the same daily energy but concentrates it around noon,
-        // where a real array does peak.
+        // ===================== Solar resource (real PVGIS data) =====================
+        // data.default_pvgis carries a full year of hourly PVGIS output for the site:
+        // 8,784 rows of P (W per 1 kWp installed), plane-of-array irradiance G(i) and
+        // ambient temperature T2m. Every solar figure below is derived from that series.
+        //
+        // It used to be ignored. The daily curve was an invented half-sine whose area was
+        // forced to kWp x PSH, which pins the midday peak at PSH*PI / (2 * 12) = 52% of
+        // kWp -- the PI came from the assumed shape, not from anything electrical -- and
+        // the monthly table filled every row with PSH * 30 and PR = 1.000. The measured
+        // series peaks at 85% of kWp, swings by a factor of 1.7 across the year and is
+        // asymmetric about noon; none of that survived the formula.
 
-        // (1/π)·∫₀^π sinⁿ(x) dx by Simpson's rule
-        function sinPowerMean(n) {
-            const N = 2000;
-            let sum = 0;
-            for (let i = 0; i <= N; i++) {
-                const w = (i === 0 || i === N) ? 1 : (i % 2 ? 4 : 2);
-                sum += w * Math.pow(Math.sin(Math.PI * i / N), n);
-            }
-            return sum / (3 * N);
+        let _pvgisCache = null;
+
+        function getPvgisResource() {
+            if (_pvgisCache !== null) return _pvgisCache || null;
+            const rows = (typeof data !== 'undefined' && data.default_pvgis) || [];
+            if (rows.length === 0) { _pvgisCache = false; return null; }
+
+            const sums = new Array(24).fill(0);
+            const counts = new Array(24).fill(0);
+            const months = Array.from({ length: 12 }, () => ({ globInc: 0, tSum: 0, tCount: 0, dcPerKwp: 0 }));
+            const series = [];   // kW per kWp, every hour of the year, in order
+
+            rows.forEach(r => {
+                const t = String(r.time || '');
+                const utcH = parseInt(t.slice(9, 11), 10);
+                const mon = parseInt(t.slice(4, 6), 10) - 1;
+                if (!isFinite(utcH) || !isFinite(mon) || mon < 0 || mon > 11) return;
+                const kwPerKwp = (Number(r.P) || 0) / 1000;
+                const localH = (utcH + PVGIS_UTC_OFFSET_H) % 24;
+                sums[localH] += kwPerKwp;
+                counts[localH]++;
+                series.push(kwPerKwp);
+                const m = months[mon];
+                m.globInc += (Number(r['G(i)']) || 0) / 1000;   // W/m2 for one hour -> kWh/m2
+                m.tSum += Number(r.T2m) || 0;
+                m.tCount++;
+                m.dcPerKwp += kwPerKwp;
+            });
+            if (series.length === 0) { _pvgisCache = false; return null; }
+
+            const profile = sums.map((v, idx) => (counts[idx] ? v / counts[idx] : 0));
+            const days = series.length / 24;
+            const annualPerKwp = series.reduce((a, b) => a + b, 0);
+            _pvgisCache = {
+                profile,                       // kW per kWp, by local hour
+                series,                        // kW per kWp, hour by hour
+                months,
+                days,
+                annualPerKwp,
+                dailyPerKwp: annualPerKwp / days,
+                peakPerKwp: Math.max.apply(null, series)
+            };
+            return _pvgisCache;
         }
 
-        let _solarShapeCache = { ratio: null, n: 1 };
-        function getSolarShapeExponent(peakRatio) {
-            if (_solarShapeCache.ratio === peakRatio) return _solarShapeCache.n;
-            const target = PSH / (peakRatio * (SOLAR_SUNSET - SOLAR_SUNRISE));
-            let n = 1;
-            if (target > 0 && target < 1) {
-                let lo = 0.05, hi = 40;
-                for (let i = 0; i < 60; i++) {
-                    const mid = (lo + hi) / 2;
-                    if (sinPowerMean(mid) > target) lo = mid; else hi = mid;
-                }
-                n = (lo + hi) / 2;
-            }
-            _solarShapeCache = { ratio: peakRatio, n };
-            return n;
-        }
-
-        function getSolarPeakRatio() {
-            const el = document.getElementById('solarPeakRatioInput');
-            const v = parseFloat(el && el.value);
-            const pct = isFinite(v) ? v / 100 : SOLAR_PEAK_RATIO_DEFAULT;
-            // Below PSH/window a peak that low cannot hold the day's energy; above
-            // ~95% of kWp is not physically reachable after temperature losses.
-            const floor = (PSH / (SOLAR_SUNSET - SOLAR_SUNRISE)) * 1.05;
-            return Math.min(0.95, Math.max(floor, pct));
+        // The profile is hourly; the load grid can be finer (1-minute imports), so
+        // interpolate between the two surrounding hours.
+        function solarPerKwpAtHour(profile, h) {
+            const hh = ((h % 24) + 24) % 24;
+            const i0 = Math.floor(hh);
+            const i1 = (i0 + 1) % 24;
+            const f = hh - i0;
+            return profile[i0] * (1 - f) + profile[i1] * f;
         }
 
         function buildSolarDcCurve(kwp, hoursArr) {
-            const peakRatio = getSolarPeakRatio();
-            const n = getSolarShapeExponent(peakRatio);
-            const span = SOLAR_SUNSET - SOLAR_SUNRISE;
-            return hoursArr.map(h => {
-                if (h < SOLAR_SUNRISE || h >= SOLAR_SUNSET) return 0;
-                return kwp * peakRatio * Math.pow(Math.sin(Math.PI * (h - SOLAR_SUNRISE) / span), n);
-            });
+            const res = getPvgisResource();
+            if (!res) return hoursArr.map(() => 0);
+            return hoursArr.map(h => kwp * solarPerKwpAtHour(res.profile, h));
+        }
+
+        // Average DC energy per day, straight from the measured year.
+        function solarDailyKwh(kwp) {
+            const res = getPvgisResource();
+            return res ? kwp * res.dailyPerKwp : kwp * PSH;
+        }
+
+        // Annual AC yield with the inverter limit applied to EVERY real hour. Clipping is
+        // a clear-sky midday event; deriving it from an averaged day hides most of it.
+        function solarAnnualAcKwh(kwp, invLimit) {
+            const res = getPvgisResource();
+            if (!res) return kwp * PSH * 365;
+            const cap = invLimit > 0 ? invLimit : Infinity;
+            let sum = 0;
+            for (let k = 0; k < res.series.length; k++) sum += Math.min(res.series[k] * kwp, cap);
+            return sum * (365 / res.days);   // the PVGIS year is 366 days
         }
 
         function simulateBESS(peakTarget, batCap, batPower, invLimit, is_tou, allowGridCharge, dod, solar_dc_curve, load_curve, hours, interval_hours) {
@@ -553,7 +584,7 @@
                 total_solar_kwh_day = importedPVSystData.avgDailyKwh;
             } else {
                 solar_dc_curve = formula_dc_curve;
-                total_solar_kwh_day = kwp * PSH;
+                total_solar_kwh_day = solarDailyKwh(kwp);
             }
 
             const solar_curve = solar_dc_curve.map(s => (invLimit > 0 && s > invLimit) ? invLimit : s);
@@ -604,7 +635,7 @@
             const curtailed_bat = batResult.curtailed / daysInProfile;
             const direct_consumed_day = batResult.direct_consumed / daysInProfile;
 
-            const prod_year = isUsingPVSyst ? (importedPVSystData.annualTotalMWh * 1000) : (total_solar_kwh_day * 365);
+            const prod_year = isUsingPVSyst ? (importedPVSystData.annualTotalMWh * 1000) : solarAnnualAcKwh(kwp, invLimit);
 
             // --- Financials: Solar Only ---
             const useful_year_no_bat = self_consumed_no_bat * 365;
@@ -742,7 +773,7 @@
                 if (compareTraceIndex !== undefined && compareTraceIndex >= 0) {
                     Plotly.restyle('chart1', {
                         'y': [formula_curve],
-                        'name': [`<b>⚙️ Formula (${kwp} kWp, PSH ${PSH})</b>`],
+                        'name': [`<b>⚙️ PVGIS (${kwp} kWp)</b>`],
                         'line': [{ shape: 'spline', color: '#8b5cf6', width: 2.5, dash: 'dash' }],
                         'fill': ['none'],
                         'visible': [showDesignedSolar]
@@ -786,9 +817,9 @@
                 if (activeSolarSource === 'pvsyst' && importedPVSystData) {
                     sourceDesc = `<b style="color:#d97706;">☀️ แหล่งข้อมูล Solar: ข้อมูลจำลองจริง PVSyst (E_Grid)</b> · กำลังผลิตสูงสุด ${importedPVSystData.peakPowerKw.toLocaleString()} kW · ผลิตรวม ${importedPVSystData.annualTotalMWh.toLocaleString()} MWh/ปี (เฉลี่ย ${importedPVSystData.avgDailyKwh.toLocaleString()} kWh/วัน)`;
                 } else if (activeSolarSource === 'compare' && importedPVSystData) {
-                    sourceDesc = `<b style="color:#7c3aed;">🔀 โหมดเปรียบเทียบ:</b> เส้นทึบสีส้ม = <b style="color:#d97706;">PVSyst Simulation E_Grid</b> (${importedPVSystData.peakPowerKw.toLocaleString()} kW peak) เทียบกับ เส้นประสีม่วง = <b style="color:#7c3aed;">สูตรคำนวณ Sine Wave</b> (${kwp} kWp, PSH ${PSH})`;
+                    sourceDesc = `<b style="color:#7c3aed;">🔀 โหมดเปรียบเทียบ:</b> เส้นทึบสีส้ม = <b style="color:#d97706;">PVSyst Simulation E_Grid</b> (${importedPVSystData.peakPowerKw.toLocaleString()} kW peak) เทียบกับ เส้นประสีม่วง = <b style="color:#7c3aed;">PVGIS รายชั่วโมงจริง</b> (${kwp} kWp)`;
                 } else {
-                    sourceDesc = `<b style="color:#0284c7;">⚙️ แหล่งข้อมูล Solar: สูตรคำนวณมาตรฐาน (kWp × PSH)</b> · ขนาดติดตั้ง ${kwp} kWp · PSH ${PSH} ชม./วัน`;
+                    sourceDesc = `<b style="color:#0284c7;">⚙️ แหล่งข้อมูล Solar: PVGIS รายชั่วโมงจริง (8,784 ชม./ปี)</b> · ขนาดติดตั้ง ${kwp} kWp · ผลิตเฉลี่ย ${solarDailyKwh(kwp).toFixed(0)} kWh/วัน`;
                 }
                 const loadDesc = fusionLoadIsGrid
                     ? 'เส้นสีดำคือ <b>Grid Power (โหลดสุทธิ)</b> ที่โรงงานดึงจากระบบจำหน่ายไฟฟ้า'
@@ -977,11 +1008,25 @@
             tbody.innerHTML = '';
 
             const isUsingPVSyst = (activeSolarSource === 'pvsyst' && importedPVSystData);
+            const pvgisRes = getPvgisResource();
+            // Clip each real hour, then total per calendar month.
+            const monthlyAcMWh = new Array(12).fill(0);
+            if (pvgisRes) {
+                const cap = invLimit > 0 ? invLimit : Infinity;
+                const pvRows = data.default_pvgis;
+                for (let k = 0; k < pvRows.length; k++) {
+                    const mon = parseInt(String(pvRows[k].time || '').slice(4, 6), 10) - 1;
+                    if (mon < 0 || mon > 11) continue;
+                    monthlyAcMWh[mon] += Math.min((Number(pvRows[k].P) || 0) / 1000 * kwp, cap) / 1000;
+                }
+            }
             let totalGlobInc = 0;
             let totalEArrayMWh = 0;
             let totalEGridMWh = 0;
             let prSum = 0;
             let prCount = 0;
+            let tAmbSum = 0;
+            let tAmbCount = 0;
 
             for (let i = 0; i < 12; i++) {
                 let globIncKWh, tAmbAvg, eArrayMWh, eGridMWh, pr;
@@ -993,15 +1038,26 @@
                     tAmbAvg = 30.0;
                     eArrayMWh = pr > 0 ? (eGridMWh / pr) : eGridMWh;
                     if (pr > 0) { prSum += pr; prCount++; }
+                } else if (pvgisRes && pvgisRes.months[i] && pvgisRes.months[i].tCount > 0) {
+                    // Real month out of the PVGIS year, with the inverter limit applied
+                    // hour by hour so clipping shows instead of being averaged away.
+                    const m = pvgisRes.months[i];
+                    globIncKWh = m.globInc;
+                    tAmbAvg = m.tSum / m.tCount;
+                    eArrayMWh = (m.dcPerKwp * kwp) / 1000;
+                    eGridMWh = monthlyAcMWh[i];
+                    pr = globIncKWh > 0 && kwp > 0 ? (eGridMWh * 1000) / (globIncKWh * kwp) : 0;
+                    prSum += pr; prCount++;
                 } else {
-                    globIncKWh = PSH * 30; // Just an approximation for display
+                    globIncKWh = PSH * 30; // no PVGIS data available -- rough placeholder
                     tAmbAvg = 30.0;
                     eArrayMWh = (kwp * PSH * 30) / 1000;
-                    eGridMWh = eArrayMWh; // no PR or clipping in simple mode
+                    eGridMWh = eArrayMWh;
                     pr = 1.0;
                 }
 
                 totalGlobInc += globIncKWh;
+                tAmbSum += tAmbAvg; tAmbCount++;
                 totalEArrayMWh += eArrayMWh;
                 totalEGridMWh += eGridMWh;
 
@@ -1017,16 +1073,19 @@
                 tbody.appendChild(tr);
             }
 
-            const overallPR = (isUsingPVSyst && prCount > 0) ? (prSum / prCount) : 1.0;
+            const overallPR = (prCount > 0 && totalGlobInc > 0 && kwp > 0)
+                ? (totalEGridMWh * 1000) / (totalGlobInc * kwp)
+                : 1.0;
             const finalEGridYear = isUsingPVSyst ? importedPVSystData.annualTotalMWh : totalEGridMWh;
-            const finalEArrayYear = isUsingPVSyst ? totalEArrayMWh : totalEGridMWh;
+            const finalEArrayYear = totalEArrayMWh;
+            const yearTAmb = tAmbCount > 0 ? (tAmbSum / tAmbCount) : 30.0;
 
             const trTotal = document.createElement('tr');
             trTotal.className = 'total-row';
             trTotal.innerHTML = `
                 <td>Year</td>
                 <td>${totalGlobInc.toFixed(1)}</td>
-                <td>30.00</td>
+                <td>${yearTAmb.toFixed(2)}</td>
                 <td>${finalEArrayYear.toFixed(2)}</td>
                 <td>${finalEGridYear.toFixed(2)}</td>
                 <td>${overallPR.toFixed(3)}</td>
