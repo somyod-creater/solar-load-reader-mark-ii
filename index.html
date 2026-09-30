@@ -326,7 +326,7 @@
                         <div id="dropzone" class="dropzone">
                             <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path><path d="M8 13h8M8 17h5"></path></svg></span>
                             <p class="dropzone-title">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
-                            <p class="dropzone-sub">รายงานโหลดรายชั่วโมง หรือ 15 นาที (อัพโหลดทีละหลายไฟล์ได้)</p>
+                            <p class="dropzone-sub">รายงานโหลดรายชั่วโมง / 15 นาที / 1 นาที · รองรับไฟล์กระแส (Amp) ด้วย · อัพโหลดทีละหลายไฟล์ได้</p>
                             <button type="button" class="btn-browse-file" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
                         </div>
                         <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
@@ -337,6 +337,22 @@
                             </div>
                             <div id="uploadStatus" class="status-box is-warn">
                                 ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="panel-section-title">แปลงกระแส (Amp) เป็นกำลังไฟ (kW)</div>
+                            <p class="dropzone-sub" style="text-align: left; margin: 0 0 6px;">
+                                ใช้เมื่อไฟล์โหลดบันทึกเป็น <b>กระแสรายเฟส</b> (I1 / I2 / I3) — ระบบจะแปลงเป็น kW ให้อัตโนมัติด้วยค่าด้านล่าง
+                                (P = &radic;3 &times; V &times; I<sub>เฉลี่ย</sub> &times; PF)
+                            </p>
+                            <div class="control-group">
+                                <label for="sysVoltageInput">แรงดันระบบ (V)<span class="hint">Line-to-line · 3 เฟส 4 สาย ทั่วไป = 400</span></label>
+                                <input type="number" id="sysVoltageInput" value="400" min="1" step="10" onchange="reconvertAmpData()">
+                            </div>
+                            <div class="control-group">
+                                <label for="powerFactorInput">Power Factor<span class="hint">ไม่ทราบค่าให้ใช้ 0.85</span></label>
+                                <input type="number" id="powerFactorInput" value="0.85" min="0.1" max="1" step="0.01" onchange="reconvertAmpData()">
                             </div>
                         </div>
                     </div>
