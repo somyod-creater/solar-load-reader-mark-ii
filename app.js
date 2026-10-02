@@ -831,21 +831,21 @@
                 c1cap.innerHTML = `💡 ${sourceDesc}<br>${loadDesc} และพื้นที่ใต้กราฟสีแสดงศักยภาพการผลิตไฟฟ้าของโซลาร์เซลล์ หากพื้นที่สีสูงกว่าเส้นสีดำหมายถึงมีพลังงานเหลือ (Surplus)`;
             }
 
-            // Chart 1 data labels: peak load & peak solar
+            // Chart 1 data labels: peak load & peak solar, each tied to its own trace
             const chart1Anns = [
-                peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35)
+                { ann: peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35), traceIdx: 0 }
             ];
             if (showDesignedSolar) {
                 if (activeSolarSource === 'compare' && importedPVSystData && pvsyst_curve) {
-                    chart1Anns.push(peakAnn(times, pvsyst_curve, 'Peak PVSyst', '#d97706', -35));
-                    chart1Anns.push(peakAnn(times, formula_curve, 'Peak Formula', '#7c3aed', -55));
+                    chart1Anns.push({ ann: peakAnn(times, pvsyst_curve, 'Peak PVSyst', '#d97706', -35), traceIdx: solarTraceIndex });
+                    chart1Anns.push({ ann: peakAnn(times, formula_curve, 'Peak Formula', '#7c3aed', -55), traceIdx: compareTraceIndex >= 0 ? compareTraceIndex : null });
                 } else if (activeSolarSource === 'pvsyst' && importedPVSystData) {
-                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak PVSyst', '#d97706', -35));
+                    chart1Anns.push({ ann: peakAnn(times, solar_curve, 'Peak PVSyst', '#d97706', -35), traceIdx: solarTraceIndex });
                 } else if (kwp > 0) {
-                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35));
+                    chart1Anns.push({ ann: peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35), traceIdx: solarTraceIndex });
                 }
             }
-            Plotly.relayout('chart1', { annotations: chart1Anns });
+            setPeakAnnotations('chart1', chart1Anns);
 
             // Update Chart 3 (Solar Only)
             Plotly.restyle('chart3', { 'y': [load_curve] }, [0]);
@@ -980,12 +980,10 @@
             });
 
             // Chart 5 data labels: peak grid draw before & after BESS
-            Plotly.relayout('chart5', {
-                annotations: [
-                    peakAnn(times, net_curve_no_bat, 'Solar Only', '#2196f3', -35),
-                    peakAnn(times, net_curve_bat, 'Solar + BESS', '#4caf50', 35)
-                ]
-            });
+            setPeakAnnotations('chart5', [
+                { ann: peakAnn(times, net_curve_no_bat, 'Solar Only', '#2196f3', -35), traceIdx: 1 },
+                { ann: peakAnn(times, net_curve_bat, 'Solar + BESS', '#4caf50', 35), traceIdx: 2 }
+            ]);
 
             // Lock chart1/3/4/5 to the SAME y-axis scale so they are visually comparable
             const yMaxShared = Math.ceil(Math.max(
@@ -1283,6 +1281,43 @@
             };
         }
         // Data-label helper: annotate the peak value of a curve
+        // A peak marker belongs to one trace, but Plotly keeps annotations on screen
+        // whatever the traces do — so hiding a line from the legend left its marker
+        // floating. Each chart's markers are registered with the trace they describe and
+        // re-applied whenever the legend changes.
+        const peakAnnRegistry = {};
+
+        function applyPeakAnnotations(chartId) {
+            const gd = document.getElementById(chartId);
+            const entries = peakAnnRegistry[chartId];
+            if (!gd || !entries) return;
+            const shown = idx => {
+                const t = gd.data && gd.data[idx];
+                if (!t) return false;
+                return t.visible === undefined || t.visible === true;   // not false / 'legendonly'
+            };
+            const anns = entries
+                .filter(e => e.traceIdx == null || shown(e.traceIdx))
+                .map(e => e.ann);
+            try { Plotly.relayout(chartId, { annotations: anns }); } catch (e) { }
+        }
+
+        // entries: [{ ann, traceIdx }] - traceIdx null keeps the annotation always visible
+        function setPeakAnnotations(chartId, entries) {
+            peakAnnRegistry[chartId] = entries.filter(e => e && e.ann);
+            const gd = document.getElementById(chartId);
+            if (gd && gd.on) {
+                // Re-wire every time: Plotly.newPlot drops the div's handlers, and
+                // replotCharts() calls it again after an import, so a one-shot guard
+                // left the chart with no listener for the rest of the session.
+                // Nothing else in the app listens for plotly_restyle.
+                if (gd.removeAllListeners) gd.removeAllListeners('plotly_restyle');
+                // fires on legend clicks; our own update uses relayout, so no loop
+                gd.on('plotly_restyle', () => applyPeakAnnotations(chartId));
+            }
+            applyPeakAnnotations(chartId);
+        }
+
         function peakAnn(xArr, yArr, label, color, ay) {
             const m = arrayMax(yArr);
             const i = yArr.indexOf(m);
