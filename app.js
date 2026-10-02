@@ -2070,7 +2070,11 @@
                 const bytes = new Uint8Array(textOrBuffer);
                 try {
                     if (fileName && (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls'))) {
-                        const workbook = XLSX.read(bytes, { type: 'array' });
+                        // cellDates: SheetJS otherwise converts a timestamp column to an Excel
+                        // serial, and that conversion lands about 4 s late (12:30:01 reads back
+                        // as 12:30:05). With 1-minute data that is enough to drop a reading into
+                        // the neighbouring minute, which skews the per-minute averaged profile.
+                        const workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         text = XLSX.utils.sheet_to_csv(firstSheet);
                     } else {
@@ -2722,7 +2726,11 @@
                 reader.onload = function (e) {
                     const arrayBuffer = e.target.result;
                     try {
-                        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+                        // cellDates: SheetJS otherwise converts a timestamp column to an Excel
+                        // serial, and that conversion lands about 4 s late (12:30:01 reads back
+                        // as 12:30:05). With 1-minute data that is enough to drop a reading into
+                        // the neighbouring minute, which skews the per-minute averaged profile.
+                        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
                         const firstSheetName = workbook.SheetNames[0];
                         const sheet = workbook.Sheets[firstSheetName];
 
