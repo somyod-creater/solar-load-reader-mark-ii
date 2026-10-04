@@ -1143,7 +1143,7 @@
             setTimeout(() => {
                 ['chart1', 'chart3', 'chart4', 'chart5', 'chart6', 'chart7', 'chart-fusion',
                     'plant-chart-energy', 'plant-chart-solar', 'plant-chart-grid',
-                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess']
+                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess', 'plot-chart']
                     .forEach(id => { try { Plotly.Plots.resize(id); } catch (e) { } });
             }, 50);
         }
@@ -3102,6 +3102,217 @@
                 reader.readAsArrayBuffer(file);
             }
         }
+
+
+        // ===================== Raw plot tab =====================
+        // Deliberately standalone: its own file input, its own state, its own chart.
+        // It reads a sheet, finds a time column, and draws every numeric column as it
+        // stands — no averaging, no bucketing, no unit conversion, and nothing here is
+        // read by the sizing or financial code.
+
+        let plotData = null;   // { x, xIsTime, series: [{name, y, color, hasData}] }
+
+        const PLOT_COLORS = ['#58A6FF', '#FFB020', '#2DD4BF', '#A78BFA', '#F87171',
+            '#34D399', '#FB923C', '#F472B6', '#22D3EE', '#A3E635'];
+
+        function parsePlotGrid(grid) {
+            if (!grid || grid.length < 2) return null;
+
+            // Header row + time column: the first column whose next few rows parse as
+            // dates. Falls back to row 0 with the row number as the x axis.
+            let headerRow = -1, timeCol = -1;
+            for (let r = 0; r < Math.min(grid.length - 1, 8) && headerRow < 0; r++) {
+                const row = grid[r] || [];
+                for (let c = 0; c < row.length; c++) {
+                    let hits = 0, looked = 0;
+                    for (let k = r + 1; k < Math.min(grid.length, r + 6); k++) {
+                        const cell = grid[k] && grid[k][c];
+                        if (cell == null || cell === '') continue;
+                        looked++;
+                        if (toDateCell(cell)) hits++;
+                    }
+                    if (looked >= 2 && hits === looked) { headerRow = r; timeCol = c; break; }
+                }
+            }
+            if (headerRow < 0) { headerRow = 0; timeCol = -1; }
+
+            const headers = (grid[headerRow] || []).map((h, i) => {
+                const name = String(h == null ? '' : h).trim();
+                return name || `Column ${i + 1}`;
+            });
+            const body = grid.slice(headerRow + 1).filter(r => r && r.some(c => c != null && c !== ''));
+            if (body.length === 0) return null;
+
+            const x = body.map((r, i) => {
+                if (timeCol < 0) return i + 1;
+                const d = toDateCell(r[timeCol]);
+                return d || null;
+            });
+
+            const series = [];
+            for (let c = 0; c < headers.length; c++) {
+                if (c === timeCol) continue;
+                let numeric = 0, nonZero = 0;
+                const y = body.map(r => {
+                    const raw = r[c];
+                    if (raw == null || raw === '') return null;
+                    const v = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/,/g, ''));
+                    if (!isFinite(v)) return null;
+                    numeric++;
+                    if (v !== 0) nonZero++;
+                    return v;
+                });
+                if (numeric === 0) continue;   // text or empty column - nothing to plot
+                series.push({
+                    name: headers[c],
+                    y,
+                    points: numeric,
+                    // all-zero columns (an unused generator, say) are kept but left
+                    // unticked so they don't bury the series that carry data
+                    hasData: nonZero > 0,
+                    color: PLOT_COLORS[series.length % PLOT_COLORS.length],
+                    selected: nonZero > 0
+                });
+            }
+            if (series.length === 0) return null;
+
+            return { x, xIsTime: timeCol >= 0, xName: timeCol >= 0 ? headers[timeCol] : 'Row', series, rows: body.length };
+        }
+
+        function renderPlotSeriesList() {
+            const box = document.getElementById('plotSeriesBox');
+            const list = document.getElementById('plotSeriesList');
+            if (!box || !list) return;
+            if (!plotData) { box.style.display = 'none'; list.innerHTML = ''; return; }
+            box.style.display = '';
+            list.innerHTML = '';
+            plotData.series.forEach((sr, i) => {
+                const label = document.createElement('label');
+                label.className = 'plot-series-item';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = sr.selected;
+                cb.addEventListener('change', () => { sr.selected = cb.checked; drawPlotChart(); });
+                const sw = document.createElement('span');
+                sw.className = 'plot-series-swatch';
+                sw.style.background = sr.color;
+                const nm = document.createElement('span');
+                nm.className = 'plot-series-name';
+                nm.textContent = sr.name + (sr.hasData ? '' : ' (0 ทั้งคอลัมน์)');
+                nm.title = `${sr.name} · ${sr.points.toLocaleString()} จุด`;
+                label.appendChild(cb); label.appendChild(sw); label.appendChild(nm);
+                list.appendChild(label);
+            });
+        }
+
+        function drawPlotChart() {
+            const el = document.getElementById('plot-chart');
+            if (!el) return;
+            if (!plotData) {
+                Plotly.react('plot-chart', [], {
+                    xaxis: { visible: false }, yaxis: { visible: false },
+                    annotations: [{
+                        text: 'ยังไม่ได้อัปโหลดไฟล์', xref: 'paper', yref: 'paper',
+                        x: 0.5, y: 0.5, showarrow: false, font: { size: 15 }
+                    }],
+                    margin: { l: 50, r: 20, t: 30, b: 50 }
+                }, PLOT_CONFIG);
+                return;
+            }
+            const traces = plotData.series.filter(sr => sr.selected).map(sr => ({
+                x: plotData.x,
+                y: sr.y,
+                type: 'scatter',
+                mode: 'lines',
+                name: sr.name,
+                line: { color: sr.color, width: 2 },
+                connectgaps: false            // a blank cell stays a gap, not a straight line
+            }));
+            Plotly.react('plot-chart', traces, {
+                title: chartTitle('ข้อมูลดิบจากไฟล์', `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`),
+                xaxis: Object.assign(
+                    { title: { text: plotData.xName, font: { size: 13 } }, showgrid: true },
+                    plotData.xIsTime ? { type: 'date' } : {}
+                ),
+                yaxis: { title: { text: 'ค่าตามไฟล์', font: { size: 13 } }, showgrid: true, zeroline: true },
+                legend: { orientation: 'v', yanchor: 'top', y: 1, xanchor: 'left', x: 1.02 },
+                margin: { l: 60, r: 20, t: 60, b: 60 },
+                hovermode: 'x unified'
+            }, PLOT_CONFIG);
+        }
+
+        function handlePlotUpload(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const statusEl = document.getElementById('plotStatus');
+            if (statusEl) statusEl.innerHTML = `⏳ กำลังอ่าน ${file.name}...`;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+                    const sheet = wb.Sheets[wb.SheetNames[0]];
+                    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+                    const parsed = parsePlotGrid(grid);
+                    if (!parsed) {
+                        plotData = null;
+                        if (statusEl) statusEl.innerHTML = `❌ ไม่พบคอลัมน์ตัวเลขในไฟล์นี้`;
+                        renderPlotSeriesList();
+                        drawPlotChart();
+                        return;
+                    }
+                    plotData = parsed;
+                    const span = parsed.xIsTime && parsed.x[0] && parsed.x[parsed.x.length - 1]
+                        ? `${parsed.x[0].toLocaleString()} → ${parsed.x[parsed.x.length - 1].toLocaleString()}`
+                        : `${parsed.rows.toLocaleString()} แถว`;
+                    if (statusEl) {
+                        statusEl.innerHTML =
+                            `<div style="color:#86efac;font-weight:600;margin-bottom:4px;">✅ อ่านไฟล์สำเร็จ</div>` +
+                            `📄 ${file.name}<br>📅 ${span}<br>📊 ${parsed.rows.toLocaleString()} แถว · ` +
+                            `${parsed.series.length} คอลัมน์ตัวเลข (เลือกไว้ ${parsed.series.filter(x => x.selected).length})`;
+                    }
+                    renderPlotSeriesList();
+                    drawPlotChart();
+                } catch (err) {
+                    console.error('plot upload failed', err);
+                    if (statusEl) statusEl.innerHTML = `❌ อ่านไฟล์ไม่สำเร็จ: ${err && err.message ? err.message : err}`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function clearPlotData() {
+            plotData = null;
+            const statusEl = document.getElementById('plotStatus');
+            if (statusEl) statusEl.innerHTML = 'ยังไม่ได้อัปโหลดไฟล์';
+            renderPlotSeriesList();
+            drawPlotChart();
+        }
+
+        (function wirePlotDropzone() {
+            const dz = document.getElementById('plotDropzone');
+            const input = document.getElementById('plotFileInput');
+            if (!dz || !input) return;
+            dz.addEventListener('click', (e) => {
+                if (e.target.tagName && e.target.tagName.toLowerCase() === 'button') return;
+                input.click();
+            });
+            dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+            dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+            dz.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dz.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) handlePlotUpload(Array.from(e.dataTransfer.files));
+            });
+            input.addEventListener('click', (e) => e.stopPropagation());
+            input.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    // copy before clearing: input.files is live (see the load importers)
+                    handlePlotUpload(Array.from(e.target.files));
+                    input.value = '';
+                }
+            });
+            drawPlotChart();
+        })();
 
         function processDataPoints(points, files) {
             buildWeekdayDateSuffix(points);
