@@ -3360,7 +3360,10 @@
                 y: plotSeriesValues(sr),
                 type: 'scatter',
                 mode: 'lines',
-                name: sr.name + (sr.isGrid && plotGridFlipped() ? ' (กลับเครื่องหมาย)' : ''),
+                // The legend stays as the file labels it. Screenshots get shared, and a
+                // "(กลับเครื่องหมาย)" tag on one series reads as noise to anyone who was
+                // not here when it was ticked; the subtitle carries the convention.
+                name: sr.name,
                 line: { color: sr.color, width: 2 },
                 // several series overlap, so the shading stays faint enough to read through
                 fill: 'tozeroy',
