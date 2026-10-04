@@ -771,6 +771,21 @@
                             <div class="panel-section-title">เส้นที่แสดง</div>
                             <div id="plotSeriesList" class="plot-series-list"></div>
                         </div>
+
+                        <div>
+                            <div class="panel-section-title">เส้นโซลาร์ทับ</div>
+                            <p class="dropzone-sub" style="text-align: left; margin: 0 0 6px;">
+                                ใส่ขนาดระบบเพื่อพลอตเส้นกำลังผลิตทับข้อมูลจริง · ใส่ 0 คือไม่แสดง
+                            </p>
+                            <div class="control-group">
+                                <label for="plotKwpInput">ขนาดโซลาร์ (kWp)<span class="hint">ใช้เฉพาะแท็บนี้ ไม่กระทบการคำนวณหน้าอื่น</span></label>
+                                <input type="number" id="plotKwpInput" value="0" min="0" step="10" onchange="drawPlotChart()">
+                            </div>
+                            <label class="plot-series-item" for="plotGridFlip" style="margin-top: 4px;">
+                                <input type="checkbox" id="plotGridFlip" onchange="drawPlotChart()">
+                                <span class="plot-series-name" title="ข้อมูลดิบติดลบตอนขายไฟออก — ติ๊กเพื่อกลับด้านให้ขายไฟเป็นบวก">กลับเครื่องหมาย Grid (ขายไฟ = บวก)</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 

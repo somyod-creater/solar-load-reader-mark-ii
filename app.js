@@ -3115,6 +3115,27 @@
         const PLOT_COLORS = ['#58A6FF', '#FFB020', '#2DD4BF', '#A78BFA', '#F87171',
             '#34D399', '#FB923C', '#F472B6', '#22D3EE', '#A3E635'];
 
+        // Fixed colours for the series these exports always carry, so the same quantity
+        // keeps the same colour whatever order the columns happen to arrive in.
+        const PLOT_NAMED_COLORS = {
+            production: '#3BCE76',
+            grid: '#EB85FF',
+            consumption: '#007F8D'
+        };
+
+        // "Consumption（kW）" / "Grid (kW)" -> "consumption" / "grid"
+        function plotSeriesKey(name) {
+            return String(name || '')
+                .replace(/[（(\[].*?[）)\]]/g, ' ')
+                .replace(/[^a-z]+/gi, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function plotSeriesColor(name, fallbackIndex) {
+            return PLOT_NAMED_COLORS[plotSeriesKey(name)] || PLOT_COLORS[fallbackIndex % PLOT_COLORS.length];
+        }
+
         function parsePlotGrid(grid) {
             if (!grid || grid.length < 2) return null;
 
@@ -3165,12 +3186,13 @@
                 if (numeric === 0) continue;   // text or empty column - nothing to plot
                 series.push({
                     name: headers[c],
+                    isGrid: plotSeriesKey(headers[c]) === 'grid',
                     y,
                     points: numeric,
                     // all-zero columns (an unused generator, say) are kept but left
                     // unticked so they don't bury the series that carry data
                     hasData: nonZero > 0,
-                    color: PLOT_COLORS[series.length % PLOT_COLORS.length],
+                    color: plotSeriesColor(headers[c], series.length),
                     selected: nonZero > 0
                 });
             }
@@ -3205,6 +3227,44 @@
             });
         }
 
+        // Designed-solar overlay: a reference line drawn over the raw data, built from a
+        // kWp typed on this tab and the same ideal day the rest of the app uses. It reads
+        // nothing from the file and feeds nothing back - purely something to compare against.
+        function plotSolarOverlayTrace() {
+            const el = document.getElementById('plotKwpInput');
+            const kwp = parseFloat(el && el.value);
+            if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xIsTime) return null;
+            const y = plotData.x.map(d => {
+                if (!(d instanceof Date)) return null;
+                const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+                return kwp * solarPerKwpAtHour(hour);
+            });
+            if (!y.some(v => v != null && v > 0)) return null;
+            return {
+                x: plotData.x,
+                y,
+                type: 'scatter',
+                mode: 'lines',
+                name: `โซลาร์ออกแบบ ${kwp} kWp`,
+                line: { color: '#FFB020', width: 2, dash: 'dot' },
+                connectgaps: false
+            };
+        }
+
+        // Grid is logged signed: negative while exporting. Flipping the sign puts the
+        // export above the axis without losing anything — import simply becomes negative.
+        // Math.abs() would fold the two directions together and make +100 and -100 look
+        // like the same reading, so it is not offered.
+        function plotGridFlipped() {
+            const el = document.getElementById('plotGridFlip');
+            return !!(el && el.checked);
+        }
+
+        function plotSeriesValues(sr) {
+            if (!(sr.isGrid && plotGridFlipped())) return sr.y;
+            return sr.y.map(v => (v == null ? null : -v));
+        }
+
         function drawPlotChart() {
             const el = document.getElementById('plot-chart');
             if (!el) return;
@@ -3221,13 +3281,15 @@
             }
             const traces = plotData.series.filter(sr => sr.selected).map(sr => ({
                 x: plotData.x,
-                y: sr.y,
+                y: plotSeriesValues(sr),
                 type: 'scatter',
                 mode: 'lines',
-                name: sr.name,
+                name: sr.name + (sr.isGrid && plotGridFlipped() ? ' (กลับเครื่องหมาย)' : ''),
                 line: { color: sr.color, width: 2 },
                 connectgaps: false            // a blank cell stays a gap, not a straight line
             }));
+            const solarTrace = plotSolarOverlayTrace();
+            if (solarTrace) traces.push(solarTrace);
             Plotly.react('plot-chart', traces, {
                 title: chartTitle('ข้อมูลดิบจากไฟล์', `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`),
                 xaxis: Object.assign(
