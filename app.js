@@ -831,21 +831,21 @@
                 c1cap.innerHTML = `💡 ${sourceDesc}<br>${loadDesc} และพื้นที่ใต้กราฟสีแสดงศักยภาพการผลิตไฟฟ้าของโซลาร์เซลล์ หากพื้นที่สีสูงกว่าเส้นสีดำหมายถึงมีพลังงานเหลือ (Surplus)`;
             }
 
-            // Chart 1 data labels: peak load & peak solar
+            // Chart 1 data labels: peak load & peak solar, each tied to its own trace
             const chart1Anns = [
-                peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35)
+                { ann: peakAnn(times, load_curve, fusionLoadIsGrid ? 'Peak Grid' : 'Peak Load', '#000000', -35), traceIdx: 0 }
             ];
             if (showDesignedSolar) {
                 if (activeSolarSource === 'compare' && importedPVSystData && pvsyst_curve) {
-                    chart1Anns.push(peakAnn(times, pvsyst_curve, 'Peak PVSyst', '#d97706', -35));
-                    chart1Anns.push(peakAnn(times, formula_curve, 'Peak Formula', '#7c3aed', -55));
+                    chart1Anns.push({ ann: peakAnn(times, pvsyst_curve, 'Peak PVSyst', '#d97706', -35), traceIdx: solarTraceIndex });
+                    chart1Anns.push({ ann: peakAnn(times, formula_curve, 'Peak Formula', '#7c3aed', -55), traceIdx: compareTraceIndex >= 0 ? compareTraceIndex : null });
                 } else if (activeSolarSource === 'pvsyst' && importedPVSystData) {
-                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak PVSyst', '#d97706', -35));
+                    chart1Anns.push({ ann: peakAnn(times, solar_curve, 'Peak PVSyst', '#d97706', -35), traceIdx: solarTraceIndex });
                 } else if (kwp > 0) {
-                    chart1Anns.push(peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35));
+                    chart1Anns.push({ ann: peakAnn(times, solar_curve, 'Peak Solar', '#0288d1', -35), traceIdx: solarTraceIndex });
                 }
             }
-            Plotly.relayout('chart1', { annotations: chart1Anns });
+            setPeakAnnotations('chart1', chart1Anns);
 
             // Update Chart 3 (Solar Only)
             Plotly.restyle('chart3', { 'y': [load_curve] }, [0]);
@@ -980,12 +980,10 @@
             });
 
             // Chart 5 data labels: peak grid draw before & after BESS
-            Plotly.relayout('chart5', {
-                annotations: [
-                    peakAnn(times, net_curve_no_bat, 'Solar Only', '#2196f3', -35),
-                    peakAnn(times, net_curve_bat, 'Solar + BESS', '#4caf50', 35)
-                ]
-            });
+            setPeakAnnotations('chart5', [
+                { ann: peakAnn(times, net_curve_no_bat, 'Solar Only', '#2196f3', -35), traceIdx: 1 },
+                { ann: peakAnn(times, net_curve_bat, 'Solar + BESS', '#4caf50', 35), traceIdx: 2 }
+            ]);
 
             // Lock chart1/3/4/5 to the SAME y-axis scale so they are visually comparable
             const yMaxShared = Math.ceil(Math.max(
@@ -1145,7 +1143,8 @@
             setTimeout(() => {
                 ['chart1', 'chart3', 'chart4', 'chart5', 'chart6', 'chart7', 'chart-fusion',
                     'plant-chart-energy', 'plant-chart-solar', 'plant-chart-grid',
-                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess']
+                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess',
+                    'plot-chart', 'plot-chart-2']
                     .forEach(id => { try { Plotly.Plots.resize(id); } catch (e) { } });
             }, 50);
         }
@@ -1283,6 +1282,43 @@
             };
         }
         // Data-label helper: annotate the peak value of a curve
+        // A peak marker belongs to one trace, but Plotly keeps annotations on screen
+        // whatever the traces do — so hiding a line from the legend left its marker
+        // floating. Each chart's markers are registered with the trace they describe and
+        // re-applied whenever the legend changes.
+        const peakAnnRegistry = {};
+
+        function applyPeakAnnotations(chartId) {
+            const gd = document.getElementById(chartId);
+            const entries = peakAnnRegistry[chartId];
+            if (!gd || !entries) return;
+            const shown = idx => {
+                const t = gd.data && gd.data[idx];
+                if (!t) return false;
+                return t.visible === undefined || t.visible === true;   // not false / 'legendonly'
+            };
+            const anns = entries
+                .filter(e => e.traceIdx == null || shown(e.traceIdx))
+                .map(e => e.ann);
+            try { Plotly.relayout(chartId, { annotations: anns }); } catch (e) { }
+        }
+
+        // entries: [{ ann, traceIdx }] - traceIdx null keeps the annotation always visible
+        function setPeakAnnotations(chartId, entries) {
+            peakAnnRegistry[chartId] = entries.filter(e => e && e.ann);
+            const gd = document.getElementById(chartId);
+            if (gd && gd.on) {
+                // Re-wire every time: Plotly.newPlot drops the div's handlers, and
+                // replotCharts() calls it again after an import, so a one-shot guard
+                // left the chart with no listener for the rest of the session.
+                // Nothing else in the app listens for plotly_restyle.
+                if (gd.removeAllListeners) gd.removeAllListeners('plotly_restyle');
+                // fires on legend clicks; our own update uses relayout, so no loop
+                gd.on('plotly_restyle', () => applyPeakAnnotations(chartId));
+            }
+            applyPeakAnnotations(chartId);
+        }
+
         function peakAnn(xArr, yArr, label, color, ay) {
             const m = arrayMax(yArr);
             const i = yArr.indexOf(m);
@@ -2070,7 +2106,11 @@
                 const bytes = new Uint8Array(textOrBuffer);
                 try {
                     if (fileName && (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls'))) {
-                        const workbook = XLSX.read(bytes, { type: 'array' });
+                        // cellDates: SheetJS otherwise converts a timestamp column to an Excel
+                        // serial, and that conversion lands about 4 s late (12:30:01 reads back
+                        // as 12:30:05). With 1-minute data that is enough to drop a reading into
+                        // the neighbouring minute, which skews the per-minute averaged profile.
+                        const workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         text = XLSX.utils.sheet_to_csv(firstSheet);
                     } else {
@@ -2722,7 +2762,11 @@
                 reader.onload = function (e) {
                     const arrayBuffer = e.target.result;
                     try {
-                        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+                        // cellDates: SheetJS otherwise converts a timestamp column to an Excel
+                        // serial, and that conversion lands about 4 s late (12:30:01 reads back
+                        // as 12:30:05). With 1-minute data that is enough to drop a reading into
+                        // the neighbouring minute, which skews the per-minute averaged profile.
+                        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
                         const firstSheetName = workbook.SheetNames[0];
                         const sheet = workbook.Sheets[firstSheetName];
 
@@ -3059,6 +3103,445 @@
                 reader.readAsArrayBuffer(file);
             }
         }
+
+
+        // ===================== Raw plot tab =====================
+        // Deliberately standalone: its own file input, its own state, its own chart.
+        // It reads a sheet, finds a time column, and draws every numeric column as it
+        // stands — no averaging, no bucketing, no unit conversion, and nothing here is
+        // read by the sizing or financial code.
+
+        let plotData = null;   // { x, xIsTime, series: [{name, y, color, hasData}] }
+
+        const PLOT_COLORS = ['#58A6FF', '#FFB020', '#2DD4BF', '#A78BFA', '#F87171',
+            '#34D399', '#FB923C', '#F472B6', '#22D3EE', '#A3E635'];
+
+        // Fixed colours for the series these exports always carry, so the same quantity
+        // keeps the same colour whatever order the columns happen to arrive in.
+        const PLOT_NAMED_COLORS = {
+            production: '#3BCE76',
+            grid: '#EB85FF',
+            consumption: '#007F8D'
+        };
+
+        // "Consumption（kW）" / "Grid (kW)" -> "consumption" / "grid"
+        function plotSeriesKey(name) {
+            return String(name || '')
+                .replace(/[（(\[].*?[）)\]]/g, ' ')
+                .replace(/[^a-z]+/gi, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function plotFillColor(hex, alpha) {
+            const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+            if (!m) return 'rgba(255,255,255,' + alpha + ')';
+            const n = parseInt(m[1], 16);
+            return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+        }
+
+        function plotSeriesColor(name, fallbackIndex) {
+            return PLOT_NAMED_COLORS[plotSeriesKey(name)] || PLOT_COLORS[fallbackIndex % PLOT_COLORS.length];
+        }
+
+        function parsePlotGrid(grid) {
+            if (!grid || grid.length < 2) return null;
+
+            // Header row + time column: the first column whose next few rows parse as
+            // dates. Falls back to row 0 with the row number as the x axis.
+            let headerRow = -1, timeCol = -1;
+            for (let r = 0; r < Math.min(grid.length - 1, 8) && headerRow < 0; r++) {
+                const row = grid[r] || [];
+                for (let c = 0; c < row.length; c++) {
+                    let hits = 0, looked = 0;
+                    for (let k = r + 1; k < Math.min(grid.length, r + 6); k++) {
+                        const cell = grid[k] && grid[k][c];
+                        if (cell == null || cell === '') continue;
+                        looked++;
+                        if (toDateCell(cell)) hits++;
+                    }
+                    if (looked >= 2 && hits === looked) { headerRow = r; timeCol = c; break; }
+                }
+            }
+            if (headerRow < 0) { headerRow = 0; timeCol = -1; }
+
+            const headers = (grid[headerRow] || []).map((h, i) => {
+                const name = String(h == null ? '' : h).trim();
+                return name || `Column ${i + 1}`;
+            });
+            const body = grid.slice(headerRow + 1).filter(r => r && r.some(c => c != null && c !== ''));
+            if (body.length === 0) return null;
+
+            const x = body.map((r, i) => {
+                if (timeCol < 0) return i + 1;
+                const d = toDateCell(r[timeCol]);
+                return d || null;
+            });
+            const xHours = x.map(v => (v instanceof Date)
+                ? v.getHours() + v.getMinutes() / 60 + v.getSeconds() / 3600
+                : null);
+
+            const series = [];
+            for (let c = 0; c < headers.length; c++) {
+                if (c === timeCol) continue;
+                let numeric = 0, nonZero = 0;
+                const y = body.map(r => {
+                    const raw = r[c];
+                    if (raw == null || raw === '') return null;
+                    const v = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/,/g, ''));
+                    if (!isFinite(v)) return null;
+                    numeric++;
+                    if (v !== 0) nonZero++;
+                    return v;
+                });
+                if (numeric === 0) continue;   // text or empty column - nothing to plot
+                series.push({
+                    name: headers[c],
+                    isGrid: plotSeriesKey(headers[c]) === 'grid',
+                    y,
+                    points: numeric,
+                    // all-zero columns (an unused generator, say) are kept but left
+                    // unticked so they don't bury the series that carry data
+                    hasData: nonZero > 0,
+                    color: plotSeriesColor(headers[c], series.length),
+                    selected: nonZero > 0
+                });
+            }
+            if (series.length === 0) return null;
+
+            return {
+                x, xHours, xIsTime: timeCol >= 0,
+                xName: timeCol >= 0 ? headers[timeCol] : 'Row',
+                series, rows: body.length, fileCount: 1
+            };
+        }
+
+        // One file per day is how these are exported, so two files never share a full
+        // timestamp. Matching on the time of day is what lets them be averaged at all —
+        // and for files that DO cover the same day it comes to the same grouping.
+        //
+        // Every slot averages whatever files reached it. The days start and end at
+        // different times, so the early and late slots rest on fewer files than the
+        // middle; the count per slot is carried through to the hover so a thin slot is
+        // visible rather than implied.
+        function mergePlotFiles(parsedList) {
+            const slots = new Map();      // "HH:MM" -> { hour, perSeries: Map<name,{sum,n}>, files:Set }
+            const seriesOrder = [];
+            const seriesSeen = new Set();
+
+            parsedList.forEach((p, fileIdx) => {
+                p.series.forEach(sr => {
+                    if (!seriesSeen.has(sr.name)) { seriesSeen.add(sr.name); seriesOrder.push(sr.name); }
+                });
+                p.x.forEach((xv, rowIdx) => {
+                    const hour = p.xHours ? p.xHours[rowIdx] : null;
+                    if (hour == null) return;
+                    const hh = String(Math.floor(hour)).padStart(2, '0');
+                    const mm = String(Math.round((hour - Math.floor(hour)) * 60)).padStart(2, '0');
+                    const key = `${hh}:${mm}`;
+                    let slot = slots.get(key);
+                    if (!slot) { slot = { hour, perSeries: new Map(), files: new Set() }; slots.set(key, slot); }
+                    let touched = false;
+                    p.series.forEach(sr => {
+                        const v = sr.y[rowIdx];
+                        if (v == null) return;
+                        let acc = slot.perSeries.get(sr.name);
+                        if (!acc) { acc = { sum: 0, n: 0 }; slot.perSeries.set(sr.name, acc); }
+                        acc.sum += v; acc.n++;
+                        touched = true;
+                    });
+                    if (touched) slot.files.add(fileIdx);
+                });
+            });
+
+            const keys = Array.from(slots.keys()).sort();
+            if (keys.length === 0) return null;
+
+            const series = seriesOrder.map((name, i) => {
+                let numeric = 0, nonZero = 0;
+                const y = keys.map(k => {
+                    const acc = slots.get(k).perSeries.get(name);
+                    if (!acc || acc.n === 0) return null;
+                    const v = acc.sum / acc.n;
+                    numeric++;
+                    if (v !== 0) nonZero++;
+                    return v;
+                });
+                return {
+                    name,
+                    isGrid: plotSeriesKey(name) === 'grid',
+                    y,
+                    points: numeric,
+                    hasData: nonZero > 0,
+                    color: plotSeriesColor(name, i),
+                    selected: nonZero > 0
+                };
+            }).filter(sr => sr.points > 0);
+            if (series.length === 0) return null;
+
+            return {
+                x: keys,
+                xHours: keys.map(k => slots.get(k).hour),
+                slotFiles: keys.map(k => slots.get(k).files.size),
+                xIsTime: false,
+                xName: 'เวลาในวัน',
+                series,
+                rows: keys.length,
+                fileCount: parsedList.length,
+                averaged: true
+            };
+        }
+
+        function renderPlotSeriesList() {
+            const box = document.getElementById('plotSeriesBox');
+            const list = document.getElementById('plotSeriesList');
+            if (!box || !list) return;
+            if (!plotData) { box.style.display = 'none'; list.innerHTML = ''; return; }
+            box.style.display = '';
+            list.innerHTML = '';
+            plotData.series.forEach((sr, i) => {
+                const label = document.createElement('label');
+                label.className = 'plot-series-item';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = sr.selected;
+                cb.addEventListener('change', () => { sr.selected = cb.checked; drawPlotChart(); });
+                const sw = document.createElement('span');
+                sw.className = 'plot-series-swatch';
+                sw.style.background = sr.color;
+                const nm = document.createElement('span');
+                nm.className = 'plot-series-name';
+                nm.textContent = sr.name + (sr.hasData ? '' : ' (0 ทั้งคอลัมน์)');
+                nm.title = `${sr.name} · ${sr.points.toLocaleString()} จุด`;
+                label.appendChild(cb); label.appendChild(sw); label.appendChild(nm);
+                list.appendChild(label);
+            });
+        }
+
+        // Designed-solar overlay: a reference line drawn over the raw data, built from a
+        // kWp typed on this tab and the same ideal day the rest of the app uses. It reads
+        // nothing from the file and feeds nothing back - purely something to compare against.
+        function plotSolarOverlayTrace() {
+            const el = document.getElementById('plotKwpInput');
+            const kwp = parseFloat(el && el.value);
+            if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xHours) return null;
+            const y = plotData.xHours.map(hour => (hour == null ? null : kwp * solarPerKwpAtHour(hour)));
+            if (!y.some(v => v != null && v > 0)) return null;
+            return {
+                x: plotData.x,
+                y,
+                type: 'scatter',
+                mode: 'lines',
+                name: `โซลาร์ออกแบบ ${kwp} kWp`,
+                line: { color: '#FFB020', width: 2, dash: 'dot' },
+                fill: 'tozeroy',
+                fillcolor: plotFillColor('#FFB020', 0.14),
+                connectgaps: false
+            };
+        }
+
+        // Grid is logged signed: negative while exporting. Flipping the sign puts the
+        // export above the axis without losing anything — import simply becomes negative.
+        // Math.abs() would fold the two directions together and make +100 and -100 look
+        // like the same reading, so it is not offered.
+        function plotGridFlipped() {
+            const el = document.getElementById('plotGridFlip');
+            return !!(el && el.checked);
+        }
+
+        function plotSeriesValues(sr) {
+            if (!(sr.isGrid && plotGridFlipped())) return sr.y;
+            return sr.y.map(v => (v == null ? null : -v));
+        }
+
+        function plotSeriesTrace(sr) {
+            return {
+                x: plotData.x,
+                y: plotSeriesValues(sr),
+                type: 'scatter',
+                mode: 'lines',
+                // The legend stays as the file labels it. Screenshots get shared, and a
+                // "(กลับเครื่องหมาย)" tag on one series reads as noise to anyone who was
+                // not here when it was ticked; the subtitle carries the convention.
+                name: sr.name,
+                line: { color: sr.color, width: 2 },
+                // several series overlap, so the shading stays faint enough to read through
+                fill: 'tozeroy',
+                fillcolor: plotFillColor(sr.color, 0.12),
+                connectgaps: false,           // a blank cell stays a gap, not a straight line
+                customdata: plotData.slotFiles || null,
+                hovertemplate: plotData.slotFiles
+                    ? '%{y:.2f}  <i>(เฉลี่ยจาก %{customdata} ไฟล์)</i><extra>%{fullData.name}</extra>'
+                    : undefined
+            };
+        }
+
+        function plotAxisLayout(titleMain, titleSub, yTitle) {
+            return {
+                title: chartTitle(titleMain, titleSub),
+                xaxis: Object.assign(
+                    { title: { text: plotData.xName, font: { size: 13 } }, showgrid: true },
+                    plotData.xIsTime ? { type: 'date' } : {}
+                ),
+                yaxis: { title: { text: yTitle, font: { size: 13 } }, showgrid: true, zeroline: true },
+                legend: { orientation: 'v', yanchor: 'top', y: 1, xanchor: 'left', x: 1.02 },
+                margin: { l: 60, r: 20, t: 60, b: 60 },
+                hovermode: 'x unified'
+            };
+        }
+
+        function drawPlotChart() {
+            const el = document.getElementById('plot-chart');
+            const card2 = document.getElementById('plotChart2Card');
+            if (!el) return;
+            if (!plotData) {
+                if (card2) card2.style.display = 'none';
+                Plotly.react('plot-chart', [], {
+                    xaxis: { visible: false }, yaxis: { visible: false },
+                    annotations: [{
+                        text: 'ยังไม่ได้อัปโหลดไฟล์', xref: 'paper', yref: 'paper',
+                        x: 0.5, y: 0.5, showarrow: false, font: { size: 15 }
+                    }],
+                    margin: { l: 50, r: 20, t: 30, b: 50 }
+                }, PLOT_CONFIG);
+                return;
+            }
+
+            // Chart one is the measured day, Grid included. Chart two repeats Grid
+            // beside the designed solar line, which is the pair worth reading on its own
+            // scale — Grid swings negative while exporting and would otherwise set the
+            // range for everything.
+            const selected = plotData.series.filter(sr => sr.selected);
+            const gridSeries = selected.filter(sr => sr.isGrid);
+            const solarTrace = plotSolarOverlayTrace();
+
+            Plotly.react('plot-chart', selected.map(plotSeriesTrace), plotAxisLayout(
+                '📊 Average Daily Load Profile',
+                plotData.averaged
+                    ? `เฉลี่ยตามเวลาในวันจาก ${plotData.fileCount} ไฟล์ · ${plotData.rows.toLocaleString()} ช่วงเวลา`
+                    : `ข้อมูลดิบ ${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
+                'Power (kW)'), PLOT_CONFIG);
+
+            const traces2 = gridSeries.map(plotSeriesTrace);
+            if (solarTrace) traces2.push(solarTrace);
+            if (card2) card2.style.display = traces2.length ? '' : 'none';
+            if (traces2.length) {
+                const bits = [];
+                if (gridSeries.length) bits.push('Grid' + (plotGridFlipped() ? ' (ขายไฟ = บวก)' : ' (ขายไฟ = ลบ)'));
+                if (solarTrace) bits.push(solarTrace.name);
+                Plotly.react('plot-chart-2', traces2,
+                    plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)'),
+                    PLOT_CONFIG);
+                setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
+            }
+        }
+
+        function readPlotFile(file) {
+            return new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+                        const sheet = wb.Sheets[wb.SheetNames[0]];
+                        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+                        const parsed = parsePlotGrid(grid);
+                        resolve({ name: file.name, parsed });
+                    } catch (err) {
+                        console.error('plot read failed for ' + file.name, err);
+                        resolve({ name: file.name, parsed: null, error: err && err.message ? err.message : String(err) });
+                    }
+                };
+                reader.onerror = () => resolve({ name: file.name, parsed: null, error: 'read error' });
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function handlePlotUpload(files) {
+            const list = Array.from(files || []);
+            if (list.length === 0) return;
+            const statusEl = document.getElementById('plotStatus');
+            if (statusEl) statusEl.innerHTML = `⏳ กำลังอ่าน ${list.length} ไฟล์...`;
+
+            const results = await Promise.all(list.map(readPlotFile));
+            const ok = results.filter(r => r.parsed);
+            const skipped = results.filter(r => !r.parsed);
+
+            if (ok.length === 0) {
+                plotData = null;
+                if (statusEl) statusEl.innerHTML = `❌ ไม่พบคอลัมน์ตัวเลขในไฟล์ที่เลือก`;
+                renderPlotSeriesList();
+                drawPlotChart();
+                return;
+            }
+
+            plotData = ok.length === 1 ? ok[0].parsed : mergePlotFiles(ok.map(r => r.parsed));
+            if (!plotData) {
+                if (statusEl) statusEl.innerHTML = `❌ รวมข้อมูลไม่สำเร็จ`;
+                renderPlotSeriesList();
+                drawPlotChart();
+                return;
+            }
+
+            if (statusEl) {
+                let html = `<div style="color:#86efac;font-weight:600;margin-bottom:4px;">✅ อ่านไฟล์สำเร็จ</div>`;
+                if (plotData.averaged) {
+                    const counts = plotData.slotFiles || [];
+                    const lo = counts.length ? Math.min.apply(null, counts) : 0;
+                    const hi = counts.length ? Math.max.apply(null, counts) : 0;
+                    html += `📄 ${ok.length} ไฟล์ · เฉลี่ยตามเวลาในวัน<br>` +
+                        `🕐 ${plotData.x[0]} → ${plotData.x[plotData.x.length - 1]} · ${plotData.rows} ช่วงเวลา<br>` +
+                        `📊 แต่ละช่วงเฉลี่ยจาก ${lo === hi ? lo : lo + '–' + hi} ไฟล์ (ชี้ที่กราฟเพื่อดูรายจุด)`;
+                } else {
+                    const p = plotData;
+                    const span = p.xIsTime && p.x[0] && p.x[p.x.length - 1]
+                        ? `${p.x[0].toLocaleString()} → ${p.x[p.x.length - 1].toLocaleString()}`
+                        : `${p.rows.toLocaleString()} แถว`;
+                    html += `📄 ${ok[0].name}<br>📅 ${span}<br>📊 ${p.rows.toLocaleString()} แถว · ` +
+                        `${p.series.length} คอลัมน์ตัวเลข (เลือกไว้ ${p.series.filter(x => x.selected).length})`;
+                }
+                if (skipped.length) {
+                    html += `<div style="margin-top:6px;color:#FCD48A;">⚠️ ข้าม ${skipped.length} ไฟล์ที่ไม่มีข้อมูล: ` +
+                        skipped.map(r => r.name).join(', ') + `</div>`;
+                }
+                statusEl.innerHTML = html;
+            }
+            renderPlotSeriesList();
+            drawPlotChart();
+        }
+
+        function clearPlotData() {
+            plotData = null;
+            const statusEl = document.getElementById('plotStatus');
+            if (statusEl) statusEl.innerHTML = 'ยังไม่ได้อัปโหลดไฟล์';
+            renderPlotSeriesList();
+            drawPlotChart();
+        }
+
+        (function wirePlotDropzone() {
+            const dz = document.getElementById('plotDropzone');
+            const input = document.getElementById('plotFileInput');
+            if (!dz || !input) return;
+            dz.addEventListener('click', (e) => {
+                if (e.target.tagName && e.target.tagName.toLowerCase() === 'button') return;
+                input.click();
+            });
+            dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+            dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+            dz.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dz.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) handlePlotUpload(Array.from(e.dataTransfer.files));
+            });
+            input.addEventListener('click', (e) => e.stopPropagation());
+            input.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    // copy before clearing: input.files is live (see the load importers)
+                    handlePlotUpload(Array.from(e.target.files));
+                    input.value = '';
+                }
+            });
+            drawPlotChart();
+        })();
 
         function processDataPoints(points, files) {
             buildWeekdayDateSuffix(points);

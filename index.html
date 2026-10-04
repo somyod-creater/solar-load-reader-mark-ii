@@ -29,6 +29,7 @@
                 <button class="tab-btn" onclick="switchTab('tab-load', event)"><span class="step">02</span>Load &amp; Solar</button>
                 <button class="tab-btn" onclick="switchTab('tab-finance', event)"><span class="step">03</span>Finance</button>
                 <button class="tab-btn" onclick="switchTab('tab-plant', event)"><span class="step">04</span>Plant Report</button>
+                <button class="tab-btn" onclick="switchTab('tab-plot', event)"><span class="step">05</span>กราฟดิบ</button>
             </nav>
         </div>
     </header>
@@ -740,6 +741,64 @@
             <div id="plant-chart-finance" class="plant-chart" style="display:none;"></div>
             <div id="plant-chart-bess" class="plant-chart" style="display:none;"></div>
         </div><!-- end tab-plant -->
+
+        <!-- Tab 5: raw plot - deliberately isolated from every calculation -->
+        <div id="tab-plot" class="tab-page">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">กราฟดิบ</h2>
+                    <p class="page-sub">อัปโหลดไฟล์ แล้วพลอตค่าตามที่อยู่ในไฟล์ ไม่เฉลี่ย ไม่แปลงหน่วย ไม่คิดคำนวณใด · แยกขาดจากแท็บอื่นทั้งหมด</p>
+                </div>
+                <div class="page-actions">
+                    <button type="button" class="btn-ghost" onclick="clearPlotData()">ล้างข้อมูล</button>
+                </div>
+            </div>
+
+            <div class="plot-layout">
+                <div class="panel">
+                    <h4><span class="accent" style="background: #34D399;"></span>ไฟล์ข้อมูล</h4>
+                    <div class="upload-body">
+                        <div id="plotDropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์ (.csv / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p class="dropzone-sub">อ่านทุกคอลัมน์ที่เป็นตัวเลข · ใส่หลายไฟล์พร้อมกันได้ ระบบจะเฉลี่ยให้ตามเวลาในวัน</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('plotFileInput').click();">คลิกเลือกไฟล์</button>
+                        </div>
+                        <input type="file" id="plotFileInput" multiple accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <div id="plotStatus" class="status-box">ยังไม่ได้อัปโหลดไฟล์</div>
+
+                        <div id="plotSeriesBox" style="display: none;">
+                            <div class="panel-section-title">เส้นที่แสดง</div>
+                            <div id="plotSeriesList" class="plot-series-list"></div>
+                        </div>
+
+                        <div>
+                            <div class="panel-section-title">เส้นโซลาร์ทับ</div>
+                            <p class="dropzone-sub" style="text-align: left; margin: 0 0 6px;">
+                                ใส่ขนาดระบบเพื่อพลอตเส้นกำลังผลิตทับข้อมูลจริง · ใส่ 0 คือไม่แสดง
+                            </p>
+                            <div class="control-group">
+                                <label for="plotKwpInput">ขนาดโซลาร์ (kWp)<span class="hint">ใช้เฉพาะแท็บนี้ ไม่กระทบการคำนวณหน้าอื่น</span></label>
+                                <input type="number" id="plotKwpInput" value="0" min="0" step="10" onchange="drawPlotChart()">
+                            </div>
+                            <label class="plot-series-item" for="plotGridFlip" style="margin-top: 4px;">
+                                <input type="checkbox" id="plotGridFlip" onchange="drawPlotChart()">
+                                <span class="plot-series-name" title="ข้อมูลดิบติดลบตอนขายไฟออก — ติ๊กเพื่อกลับด้านให้ขายไฟเป็นบวก">กลับเครื่องหมาย Grid (ขายไฟ = บวก)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="chart-card">
+                        <div id="plot-chart" class="plot-chart"></div>
+                    </div>
+                    <div class="chart-card" id="plotChart2Card" style="display: none;">
+                        <div id="plot-chart-2" class="plot-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end tab-plot -->
 
     </main>
 

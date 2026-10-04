@@ -36,9 +36,18 @@
 
     const lower = v => (typeof v === 'string' ? v.trim().toLowerCase() : v);
 
+    // Only ever rebuild plain objects. Dates (x values on a date axis), typed arrays and
+    // anything else class-like have no own enumerable keys worth copying, so recursing
+    // into them replaced each one with {} and the trace silently lost its data.
+    function isPlainObject(v) {
+        if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+        const proto = Object.getPrototypeOf(v);
+        return proto === Object.prototype || proto === null;
+    }
+
     function walkLayout(node, parentKey) {
         if (Array.isArray(node)) return node.map(n => walkLayout(n, parentKey));
-        if (!node || typeof node !== 'object') return node;
+        if (!isPlainObject(node)) return node;
         const out = {};
         for (const key of Object.keys(node)) {
             let v = node[key];
@@ -52,7 +61,7 @@
                     // chartTitle() embeds a grey subtitle span
                     v = v.replace(/color:\s*#777\b/gi, 'color:' + T.muted);
                 }
-            } else if (v && typeof v === 'object') {
+            } else if (Array.isArray(v) || isPlainObject(v)) {
                 v = walkLayout(v, key);
             }
             out[key] = v;
@@ -62,13 +71,13 @@
 
     function walkTrace(node, parentKey) {
         if (Array.isArray(node)) return node.map(n => walkTrace(n, parentKey));
-        if (!node || typeof node !== 'object') return node;
+        if (!isPlainObject(node)) return node;
         const out = {};
         for (const key of Object.keys(node)) {
             let v = node[key];
             if (typeof v === 'string' && key === 'color' && (parentKey === 'line' || parentKey === 'marker') && TRACE_COLOR_MAP[lower(v)]) {
                 v = TRACE_COLOR_MAP[lower(v)];
-            } else if (v && typeof v === 'object') {
+            } else if (Array.isArray(v) || isPlainObject(v)) {
                 v = walkTrace(v, key);
             }
             out[key] = v;
