@@ -761,10 +761,10 @@
                         <div id="plotDropzone" class="dropzone">
                             <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path></svg></span>
                             <p class="dropzone-title">ลากไฟล์ (.csv / .xlsx) หรือคลิกเลือกไฟล์</p>
-                            <p class="dropzone-sub">อ่านทุกคอลัมน์ที่เป็นตัวเลข แล้วให้เลือกเองว่าจะพลอตอันไหน</p>
+                            <p class="dropzone-sub">อ่านทุกคอลัมน์ที่เป็นตัวเลข · ใส่หลายไฟล์พร้อมกันได้ ระบบจะเฉลี่ยให้ตามเวลาในวัน</p>
                             <button type="button" class="btn-browse-file" onclick="document.getElementById('plotFileInput').click();">คลิกเลือกไฟล์</button>
                         </div>
-                        <input type="file" id="plotFileInput" accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <input type="file" id="plotFileInput" multiple accept=".csv,.txt,.xlsx,.xls" style="display: none;">
                         <div id="plotStatus" class="status-box">ยังไม่ได้อัปโหลดไฟล์</div>
 
                         <div id="plotSeriesBox" style="display: none;">

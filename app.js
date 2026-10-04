@@ -3169,6 +3169,9 @@
                 const d = toDateCell(r[timeCol]);
                 return d || null;
             });
+            const xHours = x.map(v => (v instanceof Date)
+                ? v.getHours() + v.getMinutes() / 60 + v.getSeconds() / 3600
+                : null);
 
             const series = [];
             for (let c = 0; c < headers.length; c++) {
@@ -3198,7 +3201,87 @@
             }
             if (series.length === 0) return null;
 
-            return { x, xIsTime: timeCol >= 0, xName: timeCol >= 0 ? headers[timeCol] : 'Row', series, rows: body.length };
+            return {
+                x, xHours, xIsTime: timeCol >= 0,
+                xName: timeCol >= 0 ? headers[timeCol] : 'Row',
+                series, rows: body.length, fileCount: 1
+            };
+        }
+
+        // One file per day is how these are exported, so two files never share a full
+        // timestamp. Matching on the time of day is what lets them be averaged at all —
+        // and for files that DO cover the same day it comes to the same grouping.
+        //
+        // Every slot averages whatever files reached it. The days start and end at
+        // different times, so the early and late slots rest on fewer files than the
+        // middle; the count per slot is carried through to the hover so a thin slot is
+        // visible rather than implied.
+        function mergePlotFiles(parsedList) {
+            const slots = new Map();      // "HH:MM" -> { hour, perSeries: Map<name,{sum,n}>, files:Set }
+            const seriesOrder = [];
+            const seriesSeen = new Set();
+
+            parsedList.forEach((p, fileIdx) => {
+                p.series.forEach(sr => {
+                    if (!seriesSeen.has(sr.name)) { seriesSeen.add(sr.name); seriesOrder.push(sr.name); }
+                });
+                p.x.forEach((xv, rowIdx) => {
+                    const hour = p.xHours ? p.xHours[rowIdx] : null;
+                    if (hour == null) return;
+                    const hh = String(Math.floor(hour)).padStart(2, '0');
+                    const mm = String(Math.round((hour - Math.floor(hour)) * 60)).padStart(2, '0');
+                    const key = `${hh}:${mm}`;
+                    let slot = slots.get(key);
+                    if (!slot) { slot = { hour, perSeries: new Map(), files: new Set() }; slots.set(key, slot); }
+                    let touched = false;
+                    p.series.forEach(sr => {
+                        const v = sr.y[rowIdx];
+                        if (v == null) return;
+                        let acc = slot.perSeries.get(sr.name);
+                        if (!acc) { acc = { sum: 0, n: 0 }; slot.perSeries.set(sr.name, acc); }
+                        acc.sum += v; acc.n++;
+                        touched = true;
+                    });
+                    if (touched) slot.files.add(fileIdx);
+                });
+            });
+
+            const keys = Array.from(slots.keys()).sort();
+            if (keys.length === 0) return null;
+
+            const series = seriesOrder.map((name, i) => {
+                let numeric = 0, nonZero = 0;
+                const y = keys.map(k => {
+                    const acc = slots.get(k).perSeries.get(name);
+                    if (!acc || acc.n === 0) return null;
+                    const v = acc.sum / acc.n;
+                    numeric++;
+                    if (v !== 0) nonZero++;
+                    return v;
+                });
+                return {
+                    name,
+                    isGrid: plotSeriesKey(name) === 'grid',
+                    y,
+                    points: numeric,
+                    hasData: nonZero > 0,
+                    color: plotSeriesColor(name, i),
+                    selected: nonZero > 0
+                };
+            }).filter(sr => sr.points > 0);
+            if (series.length === 0) return null;
+
+            return {
+                x: keys,
+                xHours: keys.map(k => slots.get(k).hour),
+                slotFiles: keys.map(k => slots.get(k).files.size),
+                xIsTime: false,
+                xName: 'เวลาในวัน',
+                series,
+                rows: keys.length,
+                fileCount: parsedList.length,
+                averaged: true
+            };
         }
 
         function renderPlotSeriesList() {
@@ -3233,12 +3316,8 @@
         function plotSolarOverlayTrace() {
             const el = document.getElementById('plotKwpInput');
             const kwp = parseFloat(el && el.value);
-            if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xIsTime) return null;
-            const y = plotData.x.map(d => {
-                if (!(d instanceof Date)) return null;
-                const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
-                return kwp * solarPerKwpAtHour(hour);
-            });
+            if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xHours) return null;
+            const y = plotData.xHours.map(hour => (hour == null ? null : kwp * solarPerKwpAtHour(hour)));
             if (!y.some(v => v != null && v > 0)) return null;
             return {
                 x: plotData.x,
@@ -3286,12 +3365,20 @@
                 mode: 'lines',
                 name: sr.name + (sr.isGrid && plotGridFlipped() ? ' (กลับเครื่องหมาย)' : ''),
                 line: { color: sr.color, width: 2 },
-                connectgaps: false            // a blank cell stays a gap, not a straight line
+                connectgaps: false,           // a blank cell stays a gap, not a straight line
+                customdata: plotData.slotFiles || null,
+                hovertemplate: plotData.slotFiles
+                    ? '%{y:.2f}  <i>(เฉลี่ยจาก %{customdata} ไฟล์)</i><extra>%{fullData.name}</extra>'
+                    : undefined
             }));
             const solarTrace = plotSolarOverlayTrace();
             if (solarTrace) traces.push(solarTrace);
             Plotly.react('plot-chart', traces, {
-                title: chartTitle('ข้อมูลดิบจากไฟล์', `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`),
+                title: chartTitle(
+                    plotData.averaged ? `ค่าเฉลี่ยจาก ${plotData.fileCount} ไฟล์` : 'ข้อมูลดิบจากไฟล์',
+                    plotData.averaged
+                        ? `${plotData.rows.toLocaleString()} ช่วงเวลา · เฉลี่ยตามเวลาในวัน · ${plotData.series.length} คอลัมน์`
+                        : `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`),
                 xaxis: Object.assign(
                     { title: { text: plotData.xName, font: { size: 13 } }, showgrid: true },
                     plotData.xIsTime ? { type: 'date' } : {}
@@ -3303,43 +3390,77 @@
             }, PLOT_CONFIG);
         }
 
-        function handlePlotUpload(files) {
-            if (!files || files.length === 0) return;
-            const file = files[0];
+        function readPlotFile(file) {
+            return new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+                        const sheet = wb.Sheets[wb.SheetNames[0]];
+                        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+                        const parsed = parsePlotGrid(grid);
+                        resolve({ name: file.name, parsed });
+                    } catch (err) {
+                        console.error('plot read failed for ' + file.name, err);
+                        resolve({ name: file.name, parsed: null, error: err && err.message ? err.message : String(err) });
+                    }
+                };
+                reader.onerror = () => resolve({ name: file.name, parsed: null, error: 'read error' });
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function handlePlotUpload(files) {
+            const list = Array.from(files || []);
+            if (list.length === 0) return;
             const statusEl = document.getElementById('plotStatus');
-            if (statusEl) statusEl.innerHTML = `⏳ กำลังอ่าน ${file.name}...`;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                try {
-                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-                    const sheet = wb.Sheets[wb.SheetNames[0]];
-                    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-                    const parsed = parsePlotGrid(grid);
-                    if (!parsed) {
-                        plotData = null;
-                        if (statusEl) statusEl.innerHTML = `❌ ไม่พบคอลัมน์ตัวเลขในไฟล์นี้`;
-                        renderPlotSeriesList();
-                        drawPlotChart();
-                        return;
-                    }
-                    plotData = parsed;
-                    const span = parsed.xIsTime && parsed.x[0] && parsed.x[parsed.x.length - 1]
-                        ? `${parsed.x[0].toLocaleString()} → ${parsed.x[parsed.x.length - 1].toLocaleString()}`
-                        : `${parsed.rows.toLocaleString()} แถว`;
-                    if (statusEl) {
-                        statusEl.innerHTML =
-                            `<div style="color:#86efac;font-weight:600;margin-bottom:4px;">✅ อ่านไฟล์สำเร็จ</div>` +
-                            `📄 ${file.name}<br>📅 ${span}<br>📊 ${parsed.rows.toLocaleString()} แถว · ` +
-                            `${parsed.series.length} คอลัมน์ตัวเลข (เลือกไว้ ${parsed.series.filter(x => x.selected).length})`;
-                    }
-                    renderPlotSeriesList();
-                    drawPlotChart();
-                } catch (err) {
-                    console.error('plot upload failed', err);
-                    if (statusEl) statusEl.innerHTML = `❌ อ่านไฟล์ไม่สำเร็จ: ${err && err.message ? err.message : err}`;
+            if (statusEl) statusEl.innerHTML = `⏳ กำลังอ่าน ${list.length} ไฟล์...`;
+
+            const results = await Promise.all(list.map(readPlotFile));
+            const ok = results.filter(r => r.parsed);
+            const skipped = results.filter(r => !r.parsed);
+
+            if (ok.length === 0) {
+                plotData = null;
+                if (statusEl) statusEl.innerHTML = `❌ ไม่พบคอลัมน์ตัวเลขในไฟล์ที่เลือก`;
+                renderPlotSeriesList();
+                drawPlotChart();
+                return;
+            }
+
+            plotData = ok.length === 1 ? ok[0].parsed : mergePlotFiles(ok.map(r => r.parsed));
+            if (!plotData) {
+                if (statusEl) statusEl.innerHTML = `❌ รวมข้อมูลไม่สำเร็จ`;
+                renderPlotSeriesList();
+                drawPlotChart();
+                return;
+            }
+
+            if (statusEl) {
+                let html = `<div style="color:#86efac;font-weight:600;margin-bottom:4px;">✅ อ่านไฟล์สำเร็จ</div>`;
+                if (plotData.averaged) {
+                    const counts = plotData.slotFiles || [];
+                    const lo = counts.length ? Math.min.apply(null, counts) : 0;
+                    const hi = counts.length ? Math.max.apply(null, counts) : 0;
+                    html += `📄 ${ok.length} ไฟล์ · เฉลี่ยตามเวลาในวัน<br>` +
+                        `🕐 ${plotData.x[0]} → ${plotData.x[plotData.x.length - 1]} · ${plotData.rows} ช่วงเวลา<br>` +
+                        `📊 แต่ละช่วงเฉลี่ยจาก ${lo === hi ? lo : lo + '–' + hi} ไฟล์ (ชี้ที่กราฟเพื่อดูรายจุด)`;
+                } else {
+                    const p = plotData;
+                    const span = p.xIsTime && p.x[0] && p.x[p.x.length - 1]
+                        ? `${p.x[0].toLocaleString()} → ${p.x[p.x.length - 1].toLocaleString()}`
+                        : `${p.rows.toLocaleString()} แถว`;
+                    html += `📄 ${ok[0].name}<br>📅 ${span}<br>📊 ${p.rows.toLocaleString()} แถว · ` +
+                        `${p.series.length} คอลัมน์ตัวเลข (เลือกไว้ ${p.series.filter(x => x.selected).length})`;
                 }
-            };
-            reader.readAsArrayBuffer(file);
+                if (skipped.length) {
+                    html += `<div style="margin-top:6px;color:#FCD48A;">⚠️ ข้าม ${skipped.length} ไฟล์ที่ไม่มีข้อมูล: ` +
+                        skipped.map(r => r.name).join(', ') + `</div>`;
+                }
+                statusEl.innerHTML = html;
+            }
+            renderPlotSeriesList();
+            drawPlotChart();
         }
 
         function clearPlotData() {
