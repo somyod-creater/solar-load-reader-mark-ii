@@ -1143,7 +1143,8 @@
             setTimeout(() => {
                 ['chart1', 'chart3', 'chart4', 'chart5', 'chart6', 'chart7', 'chart-fusion',
                     'plant-chart-energy', 'plant-chart-solar', 'plant-chart-grid',
-                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess', 'plot-chart']
+                    'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess',
+                    'plot-chart', 'plot-chart-2']
                     .forEach(id => { try { Plotly.Plots.resize(id); } catch (e) { } });
             }, 50);
         }
@@ -3344,21 +3345,8 @@
             return sr.y.map(v => (v == null ? null : -v));
         }
 
-        function drawPlotChart() {
-            const el = document.getElementById('plot-chart');
-            if (!el) return;
-            if (!plotData) {
-                Plotly.react('plot-chart', [], {
-                    xaxis: { visible: false }, yaxis: { visible: false },
-                    annotations: [{
-                        text: 'ยังไม่ได้อัปโหลดไฟล์', xref: 'paper', yref: 'paper',
-                        x: 0.5, y: 0.5, showarrow: false, font: { size: 15 }
-                    }],
-                    margin: { l: 50, r: 20, t: 30, b: 50 }
-                }, PLOT_CONFIG);
-                return;
-            }
-            const traces = plotData.series.filter(sr => sr.selected).map(sr => ({
+        function plotSeriesTrace(sr) {
+            return {
                 x: plotData.x,
                 y: plotSeriesValues(sr),
                 type: 'scatter',
@@ -3370,24 +3358,67 @@
                 hovertemplate: plotData.slotFiles
                     ? '%{y:.2f}  <i>(เฉลี่ยจาก %{customdata} ไฟล์)</i><extra>%{fullData.name}</extra>'
                     : undefined
-            }));
-            const solarTrace = plotSolarOverlayTrace();
-            if (solarTrace) traces.push(solarTrace);
-            Plotly.react('plot-chart', traces, {
-                title: chartTitle(
-                    plotData.averaged ? `ค่าเฉลี่ยจาก ${plotData.fileCount} ไฟล์` : 'ข้อมูลดิบจากไฟล์',
-                    plotData.averaged
-                        ? `${plotData.rows.toLocaleString()} ช่วงเวลา · เฉลี่ยตามเวลาในวัน · ${plotData.series.length} คอลัมน์`
-                        : `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`),
+            };
+        }
+
+        function plotAxisLayout(titleMain, titleSub, yTitle) {
+            return {
+                title: chartTitle(titleMain, titleSub),
                 xaxis: Object.assign(
                     { title: { text: plotData.xName, font: { size: 13 } }, showgrid: true },
                     plotData.xIsTime ? { type: 'date' } : {}
                 ),
-                yaxis: { title: { text: 'ค่าตามไฟล์', font: { size: 13 } }, showgrid: true, zeroline: true },
+                yaxis: { title: { text: yTitle, font: { size: 13 } }, showgrid: true, zeroline: true },
                 legend: { orientation: 'v', yanchor: 'top', y: 1, xanchor: 'left', x: 1.02 },
                 margin: { l: 60, r: 20, t: 60, b: 60 },
                 hovermode: 'x unified'
-            }, PLOT_CONFIG);
+            };
+        }
+
+        function drawPlotChart() {
+            const el = document.getElementById('plot-chart');
+            const card2 = document.getElementById('plotChart2Card');
+            if (!el) return;
+            if (!plotData) {
+                if (card2) card2.style.display = 'none';
+                Plotly.react('plot-chart', [], {
+                    xaxis: { visible: false }, yaxis: { visible: false },
+                    annotations: [{
+                        text: 'ยังไม่ได้อัปโหลดไฟล์', xref: 'paper', yref: 'paper',
+                        x: 0.5, y: 0.5, showarrow: false, font: { size: 15 }
+                    }],
+                    margin: { l: 50, r: 20, t: 30, b: 50 }
+                }, PLOT_CONFIG);
+                return;
+            }
+
+            // Grid and the designed-solar line go on their own chart. Grid swings
+            // negative while exporting, so keeping it with Production and Consumption
+            // squashed all three into the top half; apart, each gets its own scale, and
+            // grid against designed solar is the comparison worth reading anyway.
+            const selected = plotData.series.filter(sr => sr.selected);
+            const main = selected.filter(sr => !sr.isGrid);
+            const gridSeries = selected.filter(sr => sr.isGrid);
+            const solarTrace = plotSolarOverlayTrace();
+
+            Plotly.react('plot-chart', main.map(plotSeriesTrace), plotAxisLayout(
+                plotData.averaged ? `ค่าเฉลี่ยจาก ${plotData.fileCount} ไฟล์` : 'ข้อมูลดิบจากไฟล์',
+                plotData.averaged
+                    ? `${plotData.rows.toLocaleString()} ช่วงเวลา · เฉลี่ยตามเวลาในวัน · ${plotData.series.length} คอลัมน์`
+                    : `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
+                'ค่าตามไฟล์'), PLOT_CONFIG);
+
+            const traces2 = gridSeries.map(plotSeriesTrace);
+            if (solarTrace) traces2.push(solarTrace);
+            if (card2) card2.style.display = traces2.length ? '' : 'none';
+            if (traces2.length) {
+                const bits = [];
+                if (gridSeries.length) bits.push('Grid' + (plotGridFlipped() ? ' (ขายไฟ = บวก)' : ' (ขายไฟ = ลบ)'));
+                if (solarTrace) bits.push(solarTrace.name);
+                Plotly.react('plot-chart-2', traces2,
+                    plotAxisLayout('Grid เทียบเส้นโซลาร์', bits.join(' · '), 'kW'), PLOT_CONFIG);
+                setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
+            }
         }
 
         function readPlotFile(file) {
