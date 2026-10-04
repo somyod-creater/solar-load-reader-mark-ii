@@ -3133,6 +3133,13 @@
                 .toLowerCase();
         }
 
+        function plotFillColor(hex, alpha) {
+            const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+            if (!m) return 'rgba(255,255,255,' + alpha + ')';
+            const n = parseInt(m[1], 16);
+            return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+        }
+
         function plotSeriesColor(name, fallbackIndex) {
             return PLOT_NAMED_COLORS[plotSeriesKey(name)] || PLOT_COLORS[fallbackIndex % PLOT_COLORS.length];
         }
@@ -3327,6 +3334,8 @@
                 mode: 'lines',
                 name: `โซลาร์ออกแบบ ${kwp} kWp`,
                 line: { color: '#FFB020', width: 2, dash: 'dot' },
+                fill: 'tozeroy',
+                fillcolor: plotFillColor('#FFB020', 0.14),
                 connectgaps: false
             };
         }
@@ -3353,6 +3362,9 @@
                 mode: 'lines',
                 name: sr.name + (sr.isGrid && plotGridFlipped() ? ' (กลับเครื่องหมาย)' : ''),
                 line: { color: sr.color, width: 2 },
+                // several series overlap, so the shading stays faint enough to read through
+                fill: 'tozeroy',
+                fillcolor: plotFillColor(sr.color, 0.12),
                 connectgaps: false,           // a blank cell stays a gap, not a straight line
                 customdata: plotData.slotFiles || null,
                 hovertemplate: plotData.slotFiles
@@ -3392,21 +3404,20 @@
                 return;
             }
 
-            // Grid and the designed-solar line go on their own chart. Grid swings
-            // negative while exporting, so keeping it with Production and Consumption
-            // squashed all three into the top half; apart, each gets its own scale, and
-            // grid against designed solar is the comparison worth reading anyway.
+            // Chart one is the measured day, Grid included. Chart two repeats Grid
+            // beside the designed solar line, which is the pair worth reading on its own
+            // scale — Grid swings negative while exporting and would otherwise set the
+            // range for everything.
             const selected = plotData.series.filter(sr => sr.selected);
-            const main = selected.filter(sr => !sr.isGrid);
             const gridSeries = selected.filter(sr => sr.isGrid);
             const solarTrace = plotSolarOverlayTrace();
 
-            Plotly.react('plot-chart', main.map(plotSeriesTrace), plotAxisLayout(
-                plotData.averaged ? `ค่าเฉลี่ยจาก ${plotData.fileCount} ไฟล์` : 'ข้อมูลดิบจากไฟล์',
+            Plotly.react('plot-chart', selected.map(plotSeriesTrace), plotAxisLayout(
+                '📊 Average Daily Load Profile',
                 plotData.averaged
-                    ? `${plotData.rows.toLocaleString()} ช่วงเวลา · เฉลี่ยตามเวลาในวัน · ${plotData.series.length} คอลัมน์`
-                    : `${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
-                'ค่าตามไฟล์'), PLOT_CONFIG);
+                    ? `เฉลี่ยตามเวลาในวันจาก ${plotData.fileCount} ไฟล์ · ${plotData.rows.toLocaleString()} ช่วงเวลา`
+                    : `ข้อมูลดิบ ${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
+                'Power (kW)'), PLOT_CONFIG);
 
             const traces2 = gridSeries.map(plotSeriesTrace);
             if (solarTrace) traces2.push(solarTrace);
@@ -3416,7 +3427,8 @@
                 if (gridSeries.length) bits.push('Grid' + (plotGridFlipped() ? ' (ขายไฟ = บวก)' : ' (ขายไฟ = ลบ)'));
                 if (solarTrace) bits.push(solarTrace.name);
                 Plotly.react('plot-chart-2', traces2,
-                    plotAxisLayout('Grid เทียบเส้นโซลาร์', bits.join(' · '), 'kW'), PLOT_CONFIG);
+                    plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)'),
+                    PLOT_CONFIG);
                 setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
             }
         }
