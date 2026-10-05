@@ -3525,15 +3525,8 @@
             const curtail = solarTrace ? plotCurtailment(solarTrace.y) : null;
             const ann2 = [];
             if (curtail && curtail.kwhDay > 0) {
-                // The load line is what gives the shaded band a stated meaning - it is the
-                // band's lower edge, so without it the red area is just a red area.
-                traces2.push({
-                    x: plotData.x, y: curtail.load.y,
-                    type: 'scatter', mode: 'lines',
-                    name: curtail.load.name + (curtail.load.proxy ? ' (ใช้แทนโหลด)' : ''),
-                    line: { color: curtail.load.color, width: 1.5, dash: 'dash' },
-                    connectgaps: false
-                });
+                // This chart stays Grid and solar. The load sets the band's lower edge and
+                // is not drawn as a series of its own - it already has its place on chart one.
                 traces2.push({
                     x: plotData.x, y: curtail.base,
                     type: 'scatter', mode: 'lines', line: { width: 0 },
@@ -3561,6 +3554,9 @@
                         borderpad: 5, font: { color: '#fff', size: 11 }, align: 'left'
                     });
                 }
+                // With no load column the band rests on Grid import instead, and that
+                // substitution has to be stated somewhere or the number reads as measured.
+                if (curtail.load.proxy) bits.push(`เทียบกับ ${curtail.load.name} (ใช้แทนโหลด)`);
                 if (curtail.days > 1) bits.push(`เฉลี่ยจาก ${curtail.days} วันในไฟล์`);
             } else if (solarTrace && curtail) {
                 bits.push('ไม่มีส่วนเกินโหลด · ใช้เองได้ทั้งหมด');
