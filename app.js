@@ -3351,6 +3351,88 @@
             };
         }
 
+        // ---- Curtailment: the slice of the designed solar curve sitting above the load ----
+        // Nothing on site can absorb that part. Depending on the contract it is exported,
+        // or simply thrown away, so it is the figure that decides whether the next 50 kWp
+        // is worth buying. It is measured against the AC curve AFTER the inverter cap,
+        // because clipped energy never leaves the inverter and is a separate loss.
+
+        function fmtKwh(v) {
+            if (!isFinite(v)) return '-';
+            return v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1);
+        }
+
+        function plotLoadReference() {
+            if (!plotData) return null;
+            const find = k => plotData.series.find(sr => plotSeriesKey(sr.name) === k && sr.hasData);
+            const direct = find('consumption') || find('load');
+            if (direct) return { y: direct.y, name: direct.name, color: direct.color, proxy: false };
+            // With nothing generating on site, every kW the meter imports IS the load.
+            // Once a production column exists that stops being true, so no guess is made.
+            const grid = plotData.series.find(sr => sr.isGrid && sr.hasData);
+            if (grid && !find('production')) {
+                return {
+                    y: grid.y.map(v => (v == null ? null : Math.max(0, v))),
+                    name: grid.name, color: grid.color, proxy: true
+                };
+            }
+            return null;
+        }
+
+        // Median spacing, so one gap in the export does not set the step for the whole sum.
+        function plotStepHours() {
+            const h = plotData && plotData.xHours;
+            if (!h) return 0;
+            const d = [];
+            for (let i = 1; i < h.length; i++) {
+                if (h[i] == null || h[i - 1] == null) continue;
+                const gap = h[i] - h[i - 1];
+                if (gap > 0) d.push(gap);
+            }
+            if (!d.length) return 0;
+            d.sort((a, b) => a - b);
+            return d[Math.floor(d.length / 2)];
+        }
+
+        // Averaged data is one synthetic day by construction; raw data is however many
+        // dates the file actually covers, so the total is divided back down to a day.
+        function plotDayCount() {
+            if (!plotData) return 1;
+            if (plotData.averaged) return 1;
+            const days = new Set();
+            plotData.x.forEach(v => { if (v instanceof Date) days.add(v.toDateString()); });
+            return Math.max(1, days.size);
+        }
+
+        function plotCurtailment(solarY) {
+            const load = plotLoadReference();
+            const step = plotStepHours();
+            if (!load || !solarY || step <= 0) return null;
+
+            const base = [], top = [];
+            let over = 0, gen = 0, peak = 0, peakIdx = -1;
+            for (let i = 0; i < solarY.length; i++) {
+                const sv = solarY[i], lv = load.y[i];
+                if (sv != null) gen += sv * step;
+                if (sv == null || lv == null) { base.push(null); top.push(null); continue; }
+                // Band runs from min(solar, load) up to solar, so it covers exactly the
+                // part above the load and can never render inverted.
+                base.push(Math.min(sv, lv));
+                top.push(sv);
+                const x = Math.max(0, sv - lv);
+                over += x * step;
+                if (x > peak) { peak = x; peakIdx = i; }
+            }
+            if (gen <= 0) return null;
+            const days = plotDayCount();
+            return {
+                load, base, top, step, days, peak, peakIdx,
+                kwhDay: over / days,
+                genDay: gen / days,
+                pct: (over / gen) * 100
+            };
+        }
+
         // Grid is logged signed: negative while exporting. Flipping the sign puts the
         // export above the axis without losing anything — import simply becomes negative.
         // Math.abs() would fold the two directions together and make +100 and -100 look
@@ -3387,7 +3469,7 @@
             };
         }
 
-        function plotAxisLayout(titleMain, titleSub, yTitle) {
+        function plotAxisLayout(titleMain, titleSub, yTitle, annotations) {
             return {
                 title: chartTitle(titleMain, titleSub),
                 xaxis: Object.assign(
@@ -3397,7 +3479,9 @@
                 yaxis: { title: { text: yTitle, font: { size: 13 } }, showgrid: true, zeroline: true },
                 legend: { orientation: 'v', yanchor: 'top', y: 1, xanchor: 'left', x: 1.02 },
                 margin: { l: 60, r: 20, t: 60, b: 60 },
-                hovermode: 'x unified'
+                hovermode: 'x unified',
+                // always set, so Plotly.react clears the previous chart's boxes
+                annotations: annotations || []
             };
         }
 
@@ -3434,14 +3518,61 @@
                 'Power (kW)'), PLOT_CONFIG);
 
             const traces2 = gridSeries.map(plotSeriesTrace);
+            const bits = [];
+            if (gridSeries.length) bits.push('Grid' + (plotGridFlipped() ? ' (ขายไฟ = บวก)' : ' (ขายไฟ = ลบ)'));
+            if (solarTrace) bits.push(solarTrace.name);
+
+            const curtail = solarTrace ? plotCurtailment(solarTrace.y) : null;
+            const ann2 = [];
+            if (curtail && curtail.kwhDay > 0) {
+                // The load line is what gives the shaded band a stated meaning - it is the
+                // band's lower edge, so without it the red area is just a red area.
+                traces2.push({
+                    x: plotData.x, y: curtail.load.y,
+                    type: 'scatter', mode: 'lines',
+                    name: curtail.load.name + (curtail.load.proxy ? ' (ใช้แทนโหลด)' : ''),
+                    line: { color: curtail.load.color, width: 1.5, dash: 'dash' },
+                    connectgaps: false
+                });
+                traces2.push({
+                    x: plotData.x, y: curtail.base,
+                    type: 'scatter', mode: 'lines', line: { width: 0 },
+                    showlegend: false, hoverinfo: 'skip', connectgaps: false
+                });
+                traces2.push({
+                    x: plotData.x, y: curtail.top,
+                    type: 'scatter', mode: 'lines', line: { width: 0 },
+                    fill: 'tonexty', fillcolor: 'rgba(229, 57, 53, 0.30)',
+                    name: `⚡ เกินโหลด ${fmtKwh(curtail.kwhDay)} หน่วย/วัน`,
+                    hoverinfo: 'skip', connectgaps: false
+                });
+                if (curtail.peakIdx >= 0) {
+                    ann2.push({
+                        // Anchored mid-band, with the box thrown clear to the upper right:
+                        // sat on top of the peak it crowded the chart title, and the
+                        // afternoon side of the curve is the one reliably empty area.
+                        x: plotData.x[curtail.peakIdx],
+                        y: (curtail.top[curtail.peakIdx] + curtail.base[curtail.peakIdx]) / 2,
+                        text: `⚡ <b>ส่วนที่เกินโหลด (Curtailment)</b><br>` +
+                            `<b>${fmtKwh(curtail.kwhDay)} หน่วย/วัน</b> · ${curtail.pct.toFixed(1)}% ของที่ผลิตได้<br>` +
+                            `ใช้เองได้ <b>${fmtKwh(curtail.genDay - curtail.kwhDay)} หน่วย/วัน</b> จาก ${fmtKwh(curtail.genDay)} หน่วย/วัน`,
+                        showarrow: true, arrowhead: 2, arrowcolor: '#E53935', ax: 115, ay: -70,
+                        bgcolor: 'rgba(229,57,53,0.92)', bordercolor: '#E53935', borderwidth: 1,
+                        borderpad: 5, font: { color: '#fff', size: 11 }, align: 'left'
+                    });
+                }
+                if (curtail.days > 1) bits.push(`เฉลี่ยจาก ${curtail.days} วันในไฟล์`);
+            } else if (solarTrace && curtail) {
+                bits.push('ไม่มีส่วนเกินโหลด · ใช้เองได้ทั้งหมด');
+            } else if (solarTrace) {
+                bits.push('ไม่พบคอลัมน์ Consumption จึงยังคิดส่วนเกินโหลดไม่ได้');
+            }
+
             if (solarTrace) traces2.push(solarTrace);
             if (card2) card2.style.display = traces2.length ? '' : 'none';
             if (traces2.length) {
-                const bits = [];
-                if (gridSeries.length) bits.push('Grid' + (plotGridFlipped() ? ' (ขายไฟ = บวก)' : ' (ขายไฟ = ลบ)'));
-                if (solarTrace) bits.push(solarTrace.name);
                 Plotly.react('plot-chart-2', traces2,
-                    plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)'),
+                    plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)', ann2),
                     PLOT_CONFIG);
                 setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
             }
