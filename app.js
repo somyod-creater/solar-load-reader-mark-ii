@@ -3325,14 +3325,25 @@
             const el = document.getElementById('plotKwpInput');
             const kwp = parseFloat(el && el.value);
             if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xHours) return null;
-            const y = plotData.xHours.map(hour => (hour == null ? null : kwp * solarPerKwpAtHour(hour)));
+            // What reaches the grid is capped by the inverter, not by the panel rating, so
+            // the line flat-tops at the limit instead of running up to kWp x PR.
+            const invEl = document.getElementById('plotInvInput');
+            const invRaw = parseFloat(invEl && invEl.value);
+            const invLimit = (isFinite(invRaw) && invRaw > 0) ? invRaw : 0;
+            const y = plotData.xHours.map(hour => {
+                if (hour == null) return null;
+                const dc = kwp * solarPerKwpAtHour(hour);
+                return invLimit > 0 ? Math.min(dc, invLimit) : dc;
+            });
             if (!y.some(v => v != null && v > 0)) return null;
             return {
                 x: plotData.x,
                 y,
                 type: 'scatter',
                 mode: 'lines',
-                name: `โซลาร์ออกแบบ ${kwp} kWp`,
+                name: invLimit > 0
+                    ? `โซลาร์ออกแบบ ${kwp} kWp / ${invLimit} kW`
+                    : `โซลาร์ออกแบบ ${kwp} kWp`,
                 line: { color: '#FFB020', width: 2, dash: 'dot' },
                 fill: 'tozeroy',
                 fillcolor: plotFillColor('#FFB020', 0.14),

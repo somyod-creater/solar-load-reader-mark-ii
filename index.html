@@ -781,6 +781,10 @@
                                 <label for="plotKwpInput">ขนาดโซลาร์ (kWp)<span class="hint">ใช้เฉพาะแท็บนี้ ไม่กระทบการคำนวณหน้าอื่น</span></label>
                                 <input type="number" id="plotKwpInput" value="0" min="0" step="10" onchange="drawPlotChart()">
                             </div>
+                            <div class="control-group">
+                                <label for="plotInvInput">ขนาด Inverter (kW)<span class="hint">จำกัดกำลังที่จ่ายออกจริง · ใส่ 0 คือไม่จำกัด</span></label>
+                                <input type="number" id="plotInvInput" value="0" min="0" step="10" onchange="drawPlotChart()">
+                            </div>
                             <label class="plot-series-item" for="plotGridFlip" style="margin-top: 4px;">
                                 <input type="checkbox" id="plotGridFlip" onchange="drawPlotChart()">
                                 <span class="plot-series-name" title="ข้อมูลดิบติดลบตอนขายไฟออก — ติ๊กเพื่อกลับด้านให้ขายไฟเป็นบวก">กลับเครื่องหมาย Grid (ขายไฟ = บวก)</span>
