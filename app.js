@@ -3362,21 +3362,15 @@
             return v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1);
         }
 
+        // On chart two the load IS Grid: that chart asks what a proposed array does to the
+        // meter, so Grid is the demand it has to serve. Taken exactly as the chart plots it,
+        // sign toggle included, and only while Grid is ticked - that way the shaded band
+        // always sits on a line that is actually on screen.
         function plotLoadReference() {
             if (!plotData) return null;
-            const find = k => plotData.series.find(sr => plotSeriesKey(sr.name) === k && sr.hasData);
-            const direct = find('consumption') || find('load');
-            if (direct) return { y: direct.y, name: direct.name, color: direct.color, proxy: false };
-            // With nothing generating on site, every kW the meter imports IS the load.
-            // Once a production column exists that stops being true, so no guess is made.
-            const grid = plotData.series.find(sr => sr.isGrid && sr.hasData);
-            if (grid && !find('production')) {
-                return {
-                    y: grid.y.map(v => (v == null ? null : Math.max(0, v))),
-                    name: grid.name, color: grid.color, proxy: true
-                };
-            }
-            return null;
+            const grid = plotData.series.find(sr => sr.isGrid && sr.hasData && sr.selected);
+            if (!grid) return null;
+            return { y: plotSeriesValues(grid), name: grid.name, color: grid.color };
         }
 
         // Median spacing, so one gap in the export does not set the step for the whole sum.
@@ -3554,14 +3548,11 @@
                         borderpad: 5, font: { color: '#fff', size: 11 }, align: 'left'
                     });
                 }
-                // With no load column the band rests on Grid import instead, and that
-                // substitution has to be stated somewhere or the number reads as measured.
-                if (curtail.load.proxy) bits.push(`เทียบกับ ${curtail.load.name} (ใช้แทนโหลด)`);
                 if (curtail.days > 1) bits.push(`เฉลี่ยจาก ${curtail.days} วันในไฟล์`);
             } else if (solarTrace && curtail) {
-                bits.push('ไม่มีส่วนเกินโหลด · ใช้เองได้ทั้งหมด');
+                bits.push('ไม่มีส่วนเกินเส้น Grid');
             } else if (solarTrace) {
-                bits.push('ไม่พบคอลัมน์ Consumption จึงยังคิดส่วนเกินโหลดไม่ได้');
+                bits.push('ติ๊ก Grid เพื่อดูส่วนที่เกิน');
             }
 
             if (solarTrace) traces2.push(solarTrace);
