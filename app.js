@@ -2735,6 +2735,86 @@
             processDataPoints(rawDataPoints, lastUploadedFiles || []);
         }
 
+        // --- PEA AMI kW report ---------------------------------------------------
+        // The utility's own 15-minute meter export, and nothing else the importer takes
+        // looks like it: a Thai cover block above the table, the column names in Thai,
+        // Buddhist-era dates with a dot before the minutes, hour 24 standing for midnight,
+        // and the reading split across three TOU rate columns with one filled per row.
+        // Rather than spread all of that through the main parser, the file is recognised
+        // by its own header and rewritten into the plain Time + Load pair the rest of the
+        // pipeline already reads, so everything downstream sees an ordinary load file.
+
+        const PEA_TS_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2})[.:](\d{2})$/;
+        const PEA_RATE_RE = /^rate\s*[abc]$/i;
+
+        function peaAmiTimestamp(v) {
+            const m = PEA_TS_RE.exec(String(v == null ? '' : v).trim());
+            if (!m) return null;
+            // Buddhist years only; a four-digit year past 2300 cannot be anything else.
+            const year = +m[3] > 2300 ? +m[3] - 543 : +m[3];
+            // Hour 24 is how the report writes the close of the last interval. Date
+            // normalises it to 00:00 the following day, which is what it means.
+            const d = new Date(year, +m[2] - 1, +m[1], +m[4], +m[5]);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function convertPeaAmiGrid(grid) {
+            if (!grid || grid.length < 2) return null;
+
+            // Both halves of the signature are required. The Thai word for "time" on its
+            // own would be far too easy to hit by accident in some other export.
+            let headerRow = -1, timeCol = -1;
+            const rateCols = [];
+            for (let r = 0; r < Math.min(grid.length, 60); r++) {
+                if (!grid[r]) continue;
+                const cells = grid[r].map(c => String(c == null ? '' : c).trim());
+                const t = cells.indexOf('เวลา');
+                if (t < 0) continue;
+                const rates = [];
+                cells.forEach((c, i) => { if (PEA_RATE_RE.test(c)) rates.push(i); });
+                if (rates.length < 2) continue;
+                headerRow = r; timeCol = t; rateCols.push.apply(rateCols, rates);
+                break;
+            }
+            if (headerRow < 0) return null;
+
+            const out = [['Time', 'Load (kW)']];
+            let pending = 0;
+            for (let r = headerRow + 1; r < grid.length; r++) {
+                const row = grid[r];
+                if (!row) continue;
+                // The three footer lines (the printed maxima, the rounding note and the
+                // name of whoever printed it) sit in this column too and simply do not
+                // parse as a timestamp.
+                const t = peaAmiTimestamp(row[timeCol]);
+                if (!t) continue;
+                let kw = null;
+                rateCols.forEach(c => {
+                    const raw = row[c];
+                    if (raw == null || raw === '') return;
+                    const v = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/,/g, ''));
+                    // One rate is filled per interval. Taking the largest of whatever is
+                    // there keeps a row readable if a future export ever fills two.
+                    if (isFinite(v) && (kw == null || v > kw)) kw = v;
+                });
+                // A slot past the print date carries a timestamp and no reading - the
+                // month is not over yet. Dropping it keeps the rest of the month out of
+                // the profile instead of importing it as hours of 0 kW.
+                if (kw == null) { pending++; continue; }
+                out.push([t, kw]);
+            }
+            if (out.length < 2) return null;
+            return {
+                grid: out,
+                meta: {
+                    readings: out.length - 1,
+                    pending,
+                    from: out[1][0],
+                    to: out[out.length - 1][0]
+                }
+            };
+        }
+
         function proceedWithLoadUpload(files, isCurrentUpload) {
             let filesLoaded = 0;
             fusionSolarData = { times: [], activePower: [], consumption: [], gridPower: [] };
@@ -2747,6 +2827,7 @@
             let directNetLoadByTime = {};
             let directNetPhaseHeaders = [];
             let fileAmpMeta = null;
+            let filePeaMeta = null;
             let ampConversionFailed = false;
             isBatchImporting = true;
 
@@ -2787,6 +2868,14 @@
                             } else {
                                 grid = ampConverted.grid;
                                 fileAmpMeta = ampConverted.meta;
+                            }
+                        } else {
+                            // A PEA AMI export becomes an ordinary Time + Load sheet here,
+                            // before any of the header detection below runs.
+                            const peaConverted = convertPeaAmiGrid(grid);
+                            if (peaConverted) {
+                                grid = peaConverted.grid;
+                                filePeaMeta = peaConverted.meta;
                             }
                         }
 
