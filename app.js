@@ -1147,7 +1147,7 @@
                 ['chart1', 'chart3', 'chart4', 'chart5', 'chart6', 'chart7', 'chart-fusion',
                     'plant-chart-energy', 'plant-chart-solar', 'plant-chart-grid',
                     'plant-chart-temp', 'plant-chart-finance', 'plant-chart-bess',
-                    'plot-chart', 'plot-chart-2']
+                    'plot-chart', 'plot-chart-2', 'plot-chart-3']
                     .forEach(id => { try { Plotly.Plots.resize(id); } catch (e) { } });
             }, 50);
         }
@@ -3528,6 +3528,18 @@
         // run goes down the day in order, because a battery cannot spend at noon what it
         // only collects at three.
 
+        // What the meter is left carrying once the array is on: the plotted Grid line
+        // minus the array's output. Negative means the array has overshot and the site is
+        // pushing back out; positive is what still has to be bought.
+        function plotAfterSolar(solarY) {
+            const load = plotLoadReference();
+            if (!load || !solarY) return null;
+            return solarY.map((sv, i) => {
+                const lv = load.y[i];
+                return (sv == null || lv == null) ? null : lv - sv;
+            });
+        }
+
         function plotBatterySettings() {
             const kwhEl = document.getElementById('plotBattKwhInput');
             const kwEl = document.getElementById('plotBattKwInput');
@@ -3590,11 +3602,8 @@
             const step = plotStepHours();
             if (!batt.kwh || !load || !solarY || step <= 0) return null;
 
-            const after = solarY.map((sv, i) => {
-                const lv = load.y[i];
-                return (sv == null || lv == null) ? null : lv - sv;
-            });
-            if (!after.some(v => v != null)) return null;
+            const after = plotAfterSolar(solarY);
+            if (!after || !after.some(v => v != null)) return null;
 
             const rawPeak = after.reduce((m, v) => (v != null && v > m ? v : m), 0);
             let lo = 0, hi = rawPeak;
@@ -3676,6 +3685,8 @@
             if (!el) return;
             if (!plotData) {
                 if (card2) card2.style.display = 'none';
+                const card3 = document.getElementById('plotChart3Card');
+                if (card3) card3.style.display = 'none';
                 Plotly.react('plot-chart', [], {
                     xaxis: { visible: false }, yaxis: { visible: false },
                     annotations: [{
@@ -3797,6 +3808,71 @@
                     PLOT_CONFIG);
                 setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
             }
+
+            drawPlotGridBuyChart(solarTrace, battery);
+        }
+
+        // Chart three answers the one question the other two do not: after all this, what
+        // is still coming off the meter. Only the positive side counts - an hour the site
+        // exports is not an hour it buys - so each curve is clipped at zero before the
+        // day's units are added up.
+        function drawPlotGridBuyChart(solarTrace, battery) {
+            const card3 = document.getElementById('plotChart3Card');
+            if (!card3) return;
+            const load = plotLoadReference();
+            const after = solarTrace ? plotAfterSolar(solarTrace.y) : null;
+            const step = plotStepHours();
+            if (!load || !after || step <= 0) { card3.style.display = 'none'; return; }
+            card3.style.display = '';
+
+            const days = plotDayCount();
+            const buy = arr => arr.map(v => (v == null ? null : Math.max(0, v)));
+            const units = arr => arr.reduce((a, v) => a + (v == null ? 0 : Math.max(0, v) * step), 0) / days;
+
+            const now = load.y;
+            const nowBuy = buy(now), afterBuy = buy(after);
+            const nowKwh = units(now), afterKwh = units(after);
+            const battBuy = battery ? buy(battery.net) : null;
+            const battKwh = battery ? units(battery.net) : null;
+
+            const line = (y, name, color, dash) => ({
+                x: plotData.x, y, type: 'scatter', mode: 'lines', name,
+                line: Object.assign({ color, width: 2 }, dash ? { dash } : {}),
+                fill: 'tozeroy', fillcolor: plotFillColor(color, 0.12),
+                connectgaps: false
+            });
+
+            const traces = [
+                line(nowBuy, `ปัจจุบัน ${fmtKwh(nowKwh)} หน่วย/วัน`, '#EB85FF'),
+                line(afterBuy, `หลังติดโซลาร์ ${fmtKwh(afterKwh)} หน่วย/วัน`, '#FFB020', 'dot')
+            ];
+            if (battBuy) {
+                traces.push(line(battBuy,
+                    `หลังโซลาร์ + แบต ${fmtKwh(battKwh)} หน่วย/วัน`, '#2DD4BF'));
+            }
+
+            const finalKwh = battBuy ? battKwh : afterKwh;
+            const saved = nowKwh - finalKwh;
+            const pct = nowKwh > 0 ? (saved / nowKwh) * 100 : 0;
+            const bits = [];
+            bits.push(`เทียบกับ ${load.name}`);
+            if (days > 1) bits.push(`เฉลี่ยจาก ${days} วันในไฟล์`);
+
+            const ann = [{
+                xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
+                xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
+                text: `⚡ <b>ไฟที่ยังต้องซื้อ</b><br>` +
+                    `ปัจจุบัน <b>${fmtKwh(nowKwh)}</b> → เหลือ <b>${fmtKwh(finalKwh)} หน่วย/วัน</b><br>` +
+                    `ลดลง <b>${fmtKwh(saved)} หน่วย/วัน</b> (${pct.toFixed(1)}%)`,
+                bgcolor: 'rgba(88, 166, 255, 0.92)', bordercolor: '#58A6FF', borderwidth: 1,
+                borderpad: 5, font: { color: '#fff', size: 11 }
+            }];
+
+            Plotly.react('plot-chart-3', traces,
+                plotAxisLayout('⚡ ไฟที่ยังต้องซื้อจากการไฟฟ้า',
+                    bits.join(' · '), 'Power (kW)', ann),
+                PLOT_CONFIG);
+            setTimeout(() => { try { Plotly.Plots.resize('plot-chart-3'); } catch (e) { } }, 30);
         }
 
         function readPlotFile(file) {
