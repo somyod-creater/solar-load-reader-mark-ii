@@ -3411,21 +3411,33 @@
         // Designed-solar overlay: a reference line drawn over the raw data, built from a
         // kWp typed on this tab and the same ideal day the rest of the app uses. It reads
         // nothing from the file and feeds nothing back - purely something to compare against.
-        function plotSolarOverlayTrace() {
+        // The array's DC and the AC the inverter actually passes are two different
+        // curves, and on a hybrid inverter the gap between them is not a loss: the DC the
+        // inverter cannot pass goes straight into the battery on the DC side without ever
+        // becoming AC. So the two are tracked apart rather than collapsed into one line.
+        function plotSolarCurves() {
             const el = document.getElementById('plotKwpInput');
             const kwp = parseFloat(el && el.value);
             if (!isFinite(kwp) || kwp <= 0 || !plotData || !plotData.xHours) return null;
-            // What reaches the grid is capped by the inverter, not by the panel rating, so
-            // the line flat-tops at the limit instead of running up to kWp x PR.
             const invEl = document.getElementById('plotInvInput');
             const invRaw = parseFloat(invEl && invEl.value);
             const invLimit = (isFinite(invRaw) && invRaw > 0) ? invRaw : 0;
-            const y = plotData.xHours.map(hour => {
-                if (hour == null) return null;
-                const dc = kwp * solarPerKwpAtHour(hour);
-                return invLimit > 0 ? Math.min(dc, invLimit) : dc;
+            const dc = [], ac = [], clip = [];
+            plotData.xHours.forEach(hour => {
+                if (hour == null) { dc.push(null); ac.push(null); clip.push(null); return; }
+                const d = kwp * solarPerKwpAtHour(hour);
+                const a = invLimit > 0 ? Math.min(d, invLimit) : d;
+                dc.push(d); ac.push(a); clip.push(d - a);
             });
-            if (!y.some(v => v != null && v > 0)) return null;
+            if (!ac.some(v => v != null && v > 0)) return null;
+            return { kwp, invLimit, dc, ac, clip, clips: clip.some(v => v != null && v > 1e-6) };
+        }
+
+        function plotSolarOverlayTrace() {
+            const sun = plotSolarCurves();
+            if (!sun) return null;
+            const { kwp, invLimit } = sun;
+            const y = sun.ac;
             return {
                 x: plotData.x,
                 y,
@@ -3551,31 +3563,55 @@
             };
         }
 
-        function plotBatteryRun(after, step, cap, rate, target, soc0) {
-            let soc = soc0 || 0, stored = 0, served = 0, spill = 0, peak = 0;
-            const charge = [], net = [];
+        function plotBatteryRun(sun, after, step, cap, rate, target, soc0) {
+            let soc = soc0 || 0;
+            let fromClip = 0, fromAc = 0, served = 0, spillClip = 0, spillAc = 0, peak = 0;
+            const chargeAc = [], chargeClip = [], net = [];
             for (let i = 0; i < after.length; i++) {
                 const a = after[i];
-                if (a == null) { charge.push(null); net.push(null); continue; }
-                let c = 0, d = 0;
-                if (a < 0) {
-                    // Surplus. Whatever the battery cannot take at this moment - because
-                    // it is full, or the surplus outruns its charge rate - stays spilt.
-                    c = Math.max(0, Math.min(-a, rate, (cap - soc) / step));
-                    soc += c * step;
-                    stored += c * step;
-                    spill += (-a - c) * step;
-                } else if (a > target) {
-                    d = Math.max(0, Math.min(a - target, rate, soc / step));
+                if (a == null) { chargeAc.push(null); chargeClip.push(null); net.push(null); continue; }
+                const clipped = sun.clip[i] || 0;
+                let room = (cap - soc) / step;
+
+                // The clipped DC goes in first. It never reached the grid, so taking it
+                // costs nothing, and there is no case where the AC surplus should be
+                // preferred over it.
+                const cC = Math.max(0, Math.min(clipped, rate, room));
+                room -= cC;
+                const surplus = Math.max(0, -a);
+                const cA = Math.max(0, Math.min(surplus, rate - cC, room));
+                soc += (cC + cA) * step;
+                fromClip += cC * step;
+                fromAc += cA * step;
+                spillClip += (clipped - cC) * step;
+                spillAc += (surplus - cA) * step;
+
+                let d = 0;
+                if (a > target) {
+                    // Discharge leaves through the same inverter the array feeds, so the
+                    // two share its rating. While the array is clipping there is no AC
+                    // headroom left and the battery cannot help, which falls out of this
+                    // on its own rather than needing a rule of its own.
+                    const headroom = sun.invLimit > 0
+                        ? Math.max(0, sun.invLimit - (sun.ac[i] || 0))
+                        : Infinity;
+                    d = Math.max(0, Math.min(a - target, rate, headroom, soc / step));
                     soc -= d * step;
                     served += d * step;
                 }
-                const n = a + c - d;
-                charge.push(c);
+
+                chargeAc.push(cA);
+                chargeClip.push(cC);
+                const n = a + cA - d;
                 net.push(n);
                 if (n > peak) peak = n;
             }
-            return { charge, net, stored, served, spill, peak, socEnd: soc };
+            return {
+                chargeAc, chargeClip, net, served, peak, socEnd: soc,
+                fromClip, fromAc, spillClip, spillAc,
+                stored: fromClip + fromAc,
+                spill: spillClip + spillAc
+            };
         }
 
         // An averaged day is the same day repeated, so the battery does not start it
@@ -3583,10 +3619,10 @@
         // a few times over and carrying SOC across the boundary settles that, and without
         // it the morning peak can never be shaved: the battery has not charged yet, so the
         // target is pinned by a peak that in reality yesterday's surplus would have cut.
-        function plotBatteryCycle(after, step, cap, rate, target) {
+        function plotBatteryCycle(sun, after, step, cap, rate, target) {
             let soc = 0, run = null;
             for (let pass = 0; pass < 6; pass++) {
-                run = plotBatteryRun(after, step, cap, rate, target, soc);
+                run = plotBatteryRun(sun, after, step, cap, rate, target, soc);
                 if (Math.abs(run.socEnd - soc) < cap * 1e-6) break;
                 soc = run.socEnd;
             }
@@ -3600,30 +3636,36 @@
             const batt = plotBatterySettings();
             const load = plotLoadReference();
             const step = plotStepHours();
-            if (!batt.kwh || !load || !solarY || step <= 0) return null;
+            const sun = plotSolarCurves();
+            if (!batt.kwh || !load || !sun || step <= 0) return null;
 
-            const after = plotAfterSolar(solarY);
+            const after = plotAfterSolar(sun.ac);
             if (!after || !after.some(v => v != null)) return null;
 
             const rawPeak = after.reduce((m, v) => (v != null && v > m ? v : m), 0);
             let lo = 0, hi = rawPeak;
             for (let k = 0; k < 44; k++) {
                 const mid = (lo + hi) / 2;
-                if (plotBatteryCycle(after, step, batt.kwh, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
+                if (plotBatteryCycle(sun, after, step, batt.kwh, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
                 else lo = mid;
             }
-            const run = plotBatteryCycle(after, step, batt.kwh, batt.kw, hi);
+            const run = plotBatteryCycle(sun, after, step, batt.kwh, batt.kw, hi);
             const days = plotDayCount();
             return {
-                batt, after, step, days,
+                batt, sun, after, step, days,
                 target: hi,
                 peakBefore: rawPeak,
                 peakAfter: run.peak,
                 net: run.net,
-                charge: run.charge,
+                chargeAc: run.chargeAc,
+                chargeClip: run.chargeClip,
                 storedDay: run.stored / days,
                 servedDay: run.served / days,
-                spillDay: run.spill / days
+                spillDay: run.spill / days,
+                fromClipDay: run.fromClip / days,
+                fromAcDay: run.fromAc / days,
+                spillClipDay: run.spillClip / days,
+                spillAcDay: run.spillAc / days
             };
         }
 
@@ -3736,10 +3778,10 @@
                     traces2.push({
                         x: plotData.x,
                         y: curtail.base.map((b, i) =>
-                            (b == null || battery.charge[i] == null) ? null : b + battery.charge[i]),
+                            (b == null || battery.chargeAc[i] == null) ? null : b + battery.chargeAc[i]),
                         type: 'scatter', mode: 'lines', line: { width: 0 },
                         fill: 'tonexty', fillcolor: 'rgba(45, 212, 191, 0.32)',
-                        name: `🔋 เก็บเข้าแบต ${fmtKwh(battery.storedDay)} หน่วย/วัน`,
+                        name: `🔋 เก็บจากไฟเกิน ${fmtKwh(battery.fromAcDay)} หน่วย/วัน`,
                         hoverinfo: 'skip', connectgaps: false
                     });
                 }
@@ -3748,7 +3790,7 @@
                     type: 'scatter', mode: 'lines', line: { width: 0 },
                     fill: 'tonexty', fillcolor: 'rgba(229, 57, 53, 0.30)',
                     name: battery
-                        ? `⚡ ยังทิ้ง ${fmtKwh(battery.spillDay)} หน่วย/วัน`
+                        ? `⚡ ยังทิ้ง ${fmtKwh(battery.spillAcDay)} หน่วย/วัน`
                         : `⚡ เกินโหลด ${fmtKwh(curtail.kwhDay)} หน่วย/วัน`,
                     hoverinfo: 'skip', connectgaps: false
                 });
@@ -3791,7 +3833,11 @@
                     xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
                     xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
                     text: `🔋 <b>แบตเตอรี่ตัดพีค</b><br>` +
-                        `เก็บส่วนเกินได้ <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
+                        `เก็บได้รวม <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
+                        `&nbsp;&nbsp;• จากไฟเกิน AC ${fmtKwh(battery.fromAcDay)}<br>` +
+                        (battery.sun.clips
+                            ? `&nbsp;&nbsp;• จาก DC ที่ inverter ตัดทิ้ง <b>${fmtKwh(battery.fromClipDay)}</b><br>`
+                            : '') +
                         `พีค <b>${battery.peakBefore.toFixed(1)} → ${battery.peakAfter.toFixed(1)} kW</b> ` +
                         `(ลด ${cut.toFixed(1)} kW)<br>` +
                         `ยังทิ้ง <b>${fmtKwh(battery.spillDay)} หน่วย/วัน</b>`,
@@ -3801,6 +3847,19 @@
             }
 
             if (solarTrace) traces2.push(solarTrace);
+            // Drawn after the AC line so the fill lands in the gap between them: on a
+            // hybrid inverter that gap is what the battery can still take.
+            const sun = plotSolarCurves();
+            if (solarTrace && sun && sun.clips) {
+                traces2.push({
+                    x: plotData.x, y: sun.dc,
+                    type: 'scatter', mode: 'lines',
+                    name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp`,
+                    line: { color: '#FB923C', width: 1, dash: 'dash' },
+                    fill: 'tonexty', fillcolor: plotFillColor('#FB923C', 0.16),
+                    connectgaps: false
+                });
+            }
             if (card2) card2.style.display = traces2.length ? '' : 'none';
             if (traces2.length) {
                 Plotly.react('plot-chart-2', traces2,
