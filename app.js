@@ -3800,6 +3800,9 @@
             const clipDay = (sun && sun.clips && stepH > 0)
                 ? sun.clip.reduce((a, v) => a + (v == null ? 0 : v * stepH), 0) / dayN
                 : 0;
+            const dcGenDay = (sun && stepH > 0)
+                ? sun.dc.reduce((a, v) => a + (v == null ? 0 : v * stepH), 0) / dayN
+                : 0;
             const storedDay = battery ? battery.storedDay : 0;
             const surplusDay = surplusAcDay + clipDay;
             const wastedDay = surplusDay - storedDay;
@@ -3829,7 +3832,7 @@
                     type: 'scatter', mode: 'lines', line: { width: 0 },
                     fill: 'tonexty', fillcolor: SPILT_FILL,
                     legendgroup: 'spilt',
-                    name: `⚡ ทิ้งจริง ${fmtKwh(wastedDay)} หน่วย/วัน`,
+                    name: `⚡ ทิ้งจริง (Curtailment) ${fmtKwh(wastedDay)} หน่วย/วัน`,
                     hoverinfo: 'skip', connectgaps: false
                 });
                 if (curtail.days > 1) bits.push(`เฉลี่ยจาก ${curtail.days} วันในไฟล์`);
@@ -3906,10 +3909,13 @@
                 if (battery) {
                     const share = surplusDay > 0 ? (storedDay / surplusDay) * 100 : 0;
                     lines.push(`🔋 แบตเก็บไป <b>${fmtKwh(storedDay)}</b> (${share.toFixed(1)}% ของส่วนเกิน)`);
-                    lines.push(`⚡ <b>ทิ้งจริง ${fmtKwh(wastedDay)} หน่วย/วัน</b>`);
-                } else {
-                    lines.push(`⚡ <b>ทิ้งทั้งหมด</b> — ยังไม่ได้ใส่แบต`);
                 }
+                // Quoted against the DC the array could have made, which is the
+                // denominator a proposal is read against.
+                const curtailPct = dcGenDay > 0 ? (wastedDay / dcGenDay) * 100 : 0;
+                lines.push(`⚡ <b>ทิ้งจริง (Curtailment) ${fmtKwh(wastedDay)} หน่วย/วัน</b>` +
+                    ` · ${curtailPct.toFixed(1)}% ของ ${fmtKwh(dcGenDay)} ที่แผงผลิตได้` +
+                    (battery ? '' : ' — ยังไม่ได้ใส่แบต'));
                 ann2.push({
                     xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
                     xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
