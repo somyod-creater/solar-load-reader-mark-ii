@@ -3552,13 +3552,21 @@
             });
         }
 
+        // A pack is not cycled flat. At 80% depth of discharge only that share of the
+        // nameplate is ever moved in a day, so every energy figure here is worked out
+        // against the usable share and the nameplate is kept only for the label.
+        const PLOT_BATT_DOD = 0.80;
+
         function plotBatterySettings() {
             const kwhEl = document.getElementById('plotBattKwhInput');
             const kwEl = document.getElementById('plotBattKwInput');
             const kwh = parseFloat(kwhEl && kwhEl.value);
             const kw = parseFloat(kwEl && kwEl.value);
+            const nameplate = (isFinite(kwh) && kwh > 0) ? kwh : 0;
             return {
-                kwh: (isFinite(kwh) && kwh > 0) ? kwh : 0,
+                kwh: nameplate,
+                usable: nameplate * PLOT_BATT_DOD,
+                dod: PLOT_BATT_DOD,
                 kw: (isFinite(kw) && kw > 0) ? kw : Infinity
             };
         }
@@ -3646,10 +3654,10 @@
             let lo = 0, hi = rawPeak;
             for (let k = 0; k < 44; k++) {
                 const mid = (lo + hi) / 2;
-                if (plotBatteryCycle(sun, after, step, batt.kwh, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
+                if (plotBatteryCycle(sun, after, step, batt.usable, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
                 else lo = mid;
             }
-            const run = plotBatteryCycle(sun, after, step, batt.kwh, batt.kw, hi);
+            const run = plotBatteryCycle(sun, after, step, batt.usable, batt.kw, hi);
             const days = plotDayCount();
             return {
                 batt, sun, after, step, days,
@@ -3826,13 +3834,16 @@
                 });
                 const cut = battery.peakBefore - battery.peakAfter;
                 bits.push(`แบต ${fmtKwh(battery.batt.kwh)} kWh` +
-                    (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : ''));
+                    (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : '') +
+                    ` (DOD ${Math.round(battery.batt.dod * 100)}% = ใช้ได้ ${fmtKwh(battery.batt.usable)} kWh)`);
                 // Pinned to the corner rather than to a point on a curve: the shaved line
                 // is flat on top, so there is no peak left for an arrow to mark.
                 ann2.push({
                     xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
                     xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
                     text: `🔋 <b>แบตเตอรี่ตัดพีค</b><br>` +
+                        `${fmtKwh(battery.batt.kwh)} kWh · DOD ${Math.round(battery.batt.dod * 100)}% ` +
+                        `→ ใช้ได้ <b>${fmtKwh(battery.batt.usable)} kWh</b><br>` +
                         `เก็บได้รวม <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
                         `&nbsp;&nbsp;• จากไฟเกิน AC ${fmtKwh(battery.fromAcDay)}<br>` +
                         (battery.sun.clips
