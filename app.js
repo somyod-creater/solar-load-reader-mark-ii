@@ -3571,9 +3571,15 @@
             };
         }
 
-        function plotBatteryRun(sun, after, step, cap, rate, target, soc0) {
+        function plotBatteryRun(sun, after, step, cap, rate, target, soc0, budget) {
             let soc = soc0 || 0;
             let fromClip = 0, fromAc = 0, served = 0, spillClip = 0, spillAc = 0, peak = 0;
+            // One cycle a day. Capacity alone would let the pack fill, empty and fill
+            // again inside a single day, which is more use than a warranty is written
+            // for, so the day's throughput is held to the usable capacity in each
+            // direction rather than just the instantaneous state of charge.
+            let inLeft = isFinite(budget) ? budget : Infinity;
+            let outLeft = isFinite(budget) ? budget : Infinity;
             const chargeAc = [], chargeClip = [], net = [];
             for (let i = 0; i < after.length; i++) {
                 const a = after[i];
@@ -3584,10 +3590,12 @@
                 // The clipped DC goes in first. It never reached the grid, so taking it
                 // costs nothing, and there is no case where the AC surplus should be
                 // preferred over it.
-                const cC = Math.max(0, Math.min(clipped, rate, room));
+                const cC = Math.max(0, Math.min(clipped, rate, room, inLeft / step));
                 room -= cC;
+                inLeft -= cC * step;
                 const surplus = Math.max(0, -a);
-                const cA = Math.max(0, Math.min(surplus, rate - cC, room));
+                const cA = Math.max(0, Math.min(surplus, rate - cC, room, inLeft / step));
+                inLeft -= cA * step;
                 soc += (cC + cA) * step;
                 fromClip += cC * step;
                 fromAc += cA * step;
@@ -3603,8 +3611,9 @@
                     const headroom = sun.invLimit > 0
                         ? Math.max(0, sun.invLimit - (sun.ac[i] || 0))
                         : Infinity;
-                    d = Math.max(0, Math.min(a - target, rate, headroom, soc / step));
+                    d = Math.max(0, Math.min(a - target, rate, headroom, soc / step, outLeft / step));
                     soc -= d * step;
+                    outLeft -= d * step;
                     served += d * step;
                 }
 
@@ -3627,10 +3636,10 @@
         // a few times over and carrying SOC across the boundary settles that, and without
         // it the morning peak can never be shaved: the battery has not charged yet, so the
         // target is pinned by a peak that in reality yesterday's surplus would have cut.
-        function plotBatteryCycle(sun, after, step, cap, rate, target) {
+        function plotBatteryCycle(sun, after, step, cap, rate, target, budget) {
             let soc = 0, run = null;
             for (let pass = 0; pass < 6; pass++) {
-                run = plotBatteryRun(sun, after, step, cap, rate, target, soc);
+                run = plotBatteryRun(sun, after, step, cap, rate, target, soc, budget);
                 if (Math.abs(run.socEnd - soc) < cap * 1e-6) break;
                 soc = run.socEnd;
             }
@@ -3650,17 +3659,21 @@
             const after = plotAfterSolar(sun.ac);
             if (!after || !after.some(v => v != null)) return null;
 
+            const days = plotDayCount();
+            // The profile may span several days, so the allowance covers all of them.
+            const budget = batt.usable * days;
+
             const rawPeak = after.reduce((m, v) => (v != null && v > m ? v : m), 0);
             let lo = 0, hi = rawPeak;
             for (let k = 0; k < 44; k++) {
                 const mid = (lo + hi) / 2;
-                if (plotBatteryCycle(sun, after, step, batt.usable, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
+                if (plotBatteryCycle(sun, after, step, batt.usable, batt.kw, mid, budget).peak <= mid + 1e-6) hi = mid;
                 else lo = mid;
             }
-            const run = plotBatteryCycle(sun, after, step, batt.usable, batt.kw, hi);
-            const days = plotDayCount();
+            const run = plotBatteryCycle(sun, after, step, batt.usable, batt.kw, hi, budget);
             return {
                 batt, sun, after, step, days,
+                cyclesDay: batt.usable > 0 ? (run.served / days) / batt.usable : 0,
                 target: hi,
                 peakBefore: rawPeak,
                 peakAfter: run.peak,
@@ -3835,7 +3848,7 @@
                 const cut = battery.peakBefore - battery.peakAfter;
                 bits.push(`แบต ${fmtKwh(battery.batt.kwh)} kWh` +
                     (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : '') +
-                    ` (DOD ${Math.round(battery.batt.dod * 100)}% = ใช้ได้ ${fmtKwh(battery.batt.usable)} kWh)`);
+                    ` (DOD ${Math.round(battery.batt.dod * 100)}% = ใช้ได้ ${fmtKwh(battery.batt.usable)} kWh · 1 รอบ/วัน)`);
                 // Pinned to the corner rather than to a point on a curve: the shaved line
                 // is flat on top, so there is no peak left for an arrow to mark.
                 ann2.push({
@@ -3843,7 +3856,8 @@
                     xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
                     text: `🔋 <b>แบตเตอรี่ตัดพีค</b><br>` +
                         `${fmtKwh(battery.batt.kwh)} kWh · DOD ${Math.round(battery.batt.dod * 100)}% ` +
-                        `→ ใช้ได้ <b>${fmtKwh(battery.batt.usable)} kWh</b><br>` +
+                        `→ ใช้ได้ <b>${fmtKwh(battery.batt.usable)} kWh</b> ` +
+                        `(ใช้ไป ${battery.cyclesDay.toFixed(2)} รอบ/วัน)<br>` +
                         `เก็บได้รวม <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
                         `&nbsp;&nbsp;• จากไฟเกิน AC ${fmtKwh(battery.fromAcDay)}<br>` +
                         (battery.sun.clips
