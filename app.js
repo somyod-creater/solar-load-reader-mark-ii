@@ -3517,6 +3517,107 @@
             };
         }
 
+        // ---- Battery on chart two: store the surplus, spend it on the peak ----------
+        // The chart already shows what a proposed array does to the meter. A battery
+        // changes two things on it and nothing else: how much of the surplus stops being
+        // thrown away, and how high what is left of the peak stands. Both are worked out
+        // from the same two curves the chart draws.
+        //
+        // It charges from the surplus only - never from the grid - so what it gives back
+        // is energy that was going to be wasted, not a second way to buy at night. The
+        // run goes down the day in order, because a battery cannot spend at noon what it
+        // only collects at three.
+
+        function plotBatterySettings() {
+            const kwhEl = document.getElementById('plotBattKwhInput');
+            const kwEl = document.getElementById('plotBattKwInput');
+            const kwh = parseFloat(kwhEl && kwhEl.value);
+            const kw = parseFloat(kwEl && kwEl.value);
+            return {
+                kwh: (isFinite(kwh) && kwh > 0) ? kwh : 0,
+                kw: (isFinite(kw) && kw > 0) ? kw : Infinity
+            };
+        }
+
+        function plotBatteryRun(after, step, cap, rate, target, soc0) {
+            let soc = soc0 || 0, stored = 0, served = 0, spill = 0, peak = 0;
+            const charge = [], net = [];
+            for (let i = 0; i < after.length; i++) {
+                const a = after[i];
+                if (a == null) { charge.push(null); net.push(null); continue; }
+                let c = 0, d = 0;
+                if (a < 0) {
+                    // Surplus. Whatever the battery cannot take at this moment - because
+                    // it is full, or the surplus outruns its charge rate - stays spilt.
+                    c = Math.max(0, Math.min(-a, rate, (cap - soc) / step));
+                    soc += c * step;
+                    stored += c * step;
+                    spill += (-a - c) * step;
+                } else if (a > target) {
+                    d = Math.max(0, Math.min(a - target, rate, soc / step));
+                    soc -= d * step;
+                    served += d * step;
+                }
+                const n = a + c - d;
+                charge.push(c);
+                net.push(n);
+                if (n > peak) peak = n;
+            }
+            return { charge, net, stored, served, spill, peak, socEnd: soc };
+        }
+
+        // An averaged day is the same day repeated, so the battery does not start it
+        // empty - it starts it holding whatever the day before left. Running the profile
+        // a few times over and carrying SOC across the boundary settles that, and without
+        // it the morning peak can never be shaved: the battery has not charged yet, so the
+        // target is pinned by a peak that in reality yesterday's surplus would have cut.
+        function plotBatteryCycle(after, step, cap, rate, target) {
+            let soc = 0, run = null;
+            for (let pass = 0; pass < 6; pass++) {
+                run = plotBatteryRun(after, step, cap, rate, target, soc);
+                if (Math.abs(run.socEnd - soc) < cap * 1e-6) break;
+                soc = run.socEnd;
+            }
+            return run;
+        }
+
+        // The lowest flat peak this battery can actually hold all day. Raising the target
+        // only ever makes it easier to hold, so the feasible targets form one range and a
+        // bisection lands on its floor.
+        function plotBatterySim(solarY) {
+            const batt = plotBatterySettings();
+            const load = plotLoadReference();
+            const step = plotStepHours();
+            if (!batt.kwh || !load || !solarY || step <= 0) return null;
+
+            const after = solarY.map((sv, i) => {
+                const lv = load.y[i];
+                return (sv == null || lv == null) ? null : lv - sv;
+            });
+            if (!after.some(v => v != null)) return null;
+
+            const rawPeak = after.reduce((m, v) => (v != null && v > m ? v : m), 0);
+            let lo = 0, hi = rawPeak;
+            for (let k = 0; k < 44; k++) {
+                const mid = (lo + hi) / 2;
+                if (plotBatteryCycle(after, step, batt.kwh, batt.kw, mid).peak <= mid + 1e-6) hi = mid;
+                else lo = mid;
+            }
+            const run = plotBatteryCycle(after, step, batt.kwh, batt.kw, hi);
+            const days = plotDayCount();
+            return {
+                batt, after, step, days,
+                target: hi,
+                peakBefore: rawPeak,
+                peakAfter: run.peak,
+                net: run.net,
+                charge: run.charge,
+                storedDay: run.stored / days,
+                servedDay: run.served / days,
+                spillDay: run.spill / days
+            };
+        }
+
         // Grid is logged signed: negative while exporting. Flipping the sign puts the
         // export above the axis without losing anything — import simply becomes negative.
         // Math.abs() would fold the two directions together and make +100 and -100 look
@@ -3607,6 +3708,7 @@
             if (solarTrace) bits.push(solarTrace.name);
 
             const curtail = solarTrace ? plotCurtailment(solarTrace.y) : null;
+            const battery = solarTrace ? plotBatterySim(solarTrace.y) : null;
             const ann2 = [];
             if (curtail && curtail.kwhDay > 0) {
                 // This chart stays Grid and solar. The load sets the band's lower edge and
@@ -3616,11 +3718,27 @@
                     type: 'scatter', mode: 'lines', line: { width: 0 },
                     showlegend: false, hoverinfo: 'skip', connectgaps: false
                 });
+                if (battery) {
+                    // The band splits where the battery stops being able to take any more,
+                    // so the lower slice IS what gets stored and the red slice above it is
+                    // what is still thrown away. Both rest on the same lower edge.
+                    traces2.push({
+                        x: plotData.x,
+                        y: curtail.base.map((b, i) =>
+                            (b == null || battery.charge[i] == null) ? null : b + battery.charge[i]),
+                        type: 'scatter', mode: 'lines', line: { width: 0 },
+                        fill: 'tonexty', fillcolor: 'rgba(45, 212, 191, 0.32)',
+                        name: `🔋 เก็บเข้าแบต ${fmtKwh(battery.storedDay)} หน่วย/วัน`,
+                        hoverinfo: 'skip', connectgaps: false
+                    });
+                }
                 traces2.push({
                     x: plotData.x, y: curtail.top,
                     type: 'scatter', mode: 'lines', line: { width: 0 },
                     fill: 'tonexty', fillcolor: 'rgba(229, 57, 53, 0.30)',
-                    name: `⚡ เกินโหลด ${fmtKwh(curtail.kwhDay)} หน่วย/วัน`,
+                    name: battery
+                        ? `⚡ ยังทิ้ง ${fmtKwh(battery.spillDay)} หน่วย/วัน`
+                        : `⚡ เกินโหลด ${fmtKwh(curtail.kwhDay)} หน่วย/วัน`,
                     hoverinfo: 'skip', connectgaps: false
                 });
                 if (curtail.peakIdx >= 0) {
@@ -3643,6 +3761,32 @@
                 bits.push('ไม่มีส่วนเกินเส้น Grid');
             } else if (solarTrace) {
                 bits.push('ติ๊ก Grid เพื่อดูส่วนที่เกิน');
+            }
+
+            if (battery) {
+                traces2.push({
+                    x: plotData.x, y: battery.net,
+                    type: 'scatter', mode: 'lines',
+                    name: `🔋 Grid หลังโซลาร์ + แบต`,
+                    line: { color: '#2DD4BF', width: 2 },
+                    connectgaps: false
+                });
+                const cut = battery.peakBefore - battery.peakAfter;
+                bits.push(`แบต ${fmtKwh(battery.batt.kwh)} kWh` +
+                    (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : ''));
+                // Pinned to the corner rather than to a point on a curve: the shaved line
+                // is flat on top, so there is no peak left for an arrow to mark.
+                ann2.push({
+                    xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
+                    xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
+                    text: `🔋 <b>แบตเตอรี่ตัดพีค</b><br>` +
+                        `เก็บส่วนเกินได้ <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
+                        `พีค <b>${battery.peakBefore.toFixed(1)} → ${battery.peakAfter.toFixed(1)} kW</b> ` +
+                        `(ลด ${cut.toFixed(1)} kW)<br>` +
+                        `ยังทิ้ง <b>${fmtKwh(battery.spillDay)} หน่วย/วัน</b>`,
+                    bgcolor: 'rgba(13, 148, 136, 0.92)', bordercolor: '#2DD4BF', borderwidth: 1,
+                    borderpad: 5, font: { color: '#fff', size: 11 }
+                });
             }
 
             if (solarTrace) traces2.push(solarTrace);
