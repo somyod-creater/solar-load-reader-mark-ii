@@ -3783,53 +3783,55 @@
 
             const curtail = solarTrace ? plotCurtailment(solarTrace.y) : null;
             const battery = solarTrace ? plotBatterySim(solarTrace.y) : null;
+            const sun = solarTrace ? plotSolarCurves() : null;
             const ann2 = [];
+
+            // Every shaded region on this chart means one of exactly two things - the
+            // battery took it, or it was thrown away - and those two colours are used for
+            // nothing else, on the AC side and the DC side alike. Each legend entry
+            // carries that side's running total, so changing the battery moves every
+            // number on the chart instead of leaving a headline that answers to nothing.
+            const STORED_FILL = 'rgba(45, 212, 191, 0.34)';
+            const SPILT_FILL = 'rgba(229, 57, 53, 0.30)';
+
+            const stepH = plotStepHours();
+            const dayN = plotDayCount();
+            const surplusAcDay = curtail ? curtail.kwhDay : 0;
+            const clipDay = (sun && sun.clips && stepH > 0)
+                ? sun.clip.reduce((a, v) => a + (v == null ? 0 : v * stepH), 0) / dayN
+                : 0;
+            const storedDay = battery ? battery.storedDay : 0;
+            const surplusDay = surplusAcDay + clipDay;
+            const wastedDay = surplusDay - storedDay;
+
             if (curtail && curtail.kwhDay > 0) {
-                // This chart stays Grid and solar. The load sets the band's lower edge and
-                // is not drawn as a series of its own - it already has its place on chart one.
+                // The lower edge the AC bands rest on. It is the load wherever the array
+                // overshoots it, so the bands cover exactly the overshoot.
                 traces2.push({
                     x: plotData.x, y: curtail.base,
                     type: 'scatter', mode: 'lines', line: { width: 0 },
                     showlegend: false, hoverinfo: 'skip', connectgaps: false
                 });
                 if (battery) {
-                    // The band splits where the battery stops being able to take any more,
-                    // so the lower slice IS what gets stored and the red slice above it is
-                    // what is still thrown away. Both rest on the same lower edge.
                     traces2.push({
                         x: plotData.x,
                         y: curtail.base.map((b, i) =>
                             (b == null || battery.chargeAc[i] == null) ? null : b + battery.chargeAc[i]),
                         type: 'scatter', mode: 'lines', line: { width: 0 },
-                        fill: 'tonexty', fillcolor: 'rgba(45, 212, 191, 0.32)',
-                        name: `🔋 เก็บจากไฟเกิน ${fmtKwh(battery.fromAcDay)} หน่วย/วัน`,
+                        fill: 'tonexty', fillcolor: STORED_FILL,
+                        legendgroup: 'stored',
+                        name: `🔋 แบตเก็บไป ${fmtKwh(storedDay)} หน่วย/วัน`,
                         hoverinfo: 'skip', connectgaps: false
                     });
                 }
                 traces2.push({
                     x: plotData.x, y: curtail.top,
                     type: 'scatter', mode: 'lines', line: { width: 0 },
-                    fill: 'tonexty', fillcolor: 'rgba(229, 57, 53, 0.30)',
-                    name: battery
-                        ? `⚡ ยังทิ้ง ${fmtKwh(battery.spillAcDay)} หน่วย/วัน`
-                        : `⚡ เกินโหลด ${fmtKwh(curtail.kwhDay)} หน่วย/วัน`,
+                    fill: 'tonexty', fillcolor: SPILT_FILL,
+                    legendgroup: 'spilt',
+                    name: `⚡ ทิ้งจริง ${fmtKwh(wastedDay)} หน่วย/วัน`,
                     hoverinfo: 'skip', connectgaps: false
                 });
-                if (curtail.peakIdx >= 0) {
-                    ann2.push({
-                        // Anchored mid-band, with the box thrown clear to the upper right:
-                        // sat on top of the peak it crowded the chart title, and the
-                        // afternoon side of the curve is the one reliably empty area.
-                        x: plotData.x[curtail.peakIdx],
-                        y: (curtail.top[curtail.peakIdx] + curtail.base[curtail.peakIdx]) / 2,
-                        text: `⚡ <b>ส่วนที่เกินโหลด (Curtailment)</b><br>` +
-                            `<b>${fmtKwh(curtail.kwhDay)} หน่วย/วัน</b> · ${curtail.pct.toFixed(1)}% ของที่ผลิตได้<br>` +
-                            `ใช้เองได้ <b>${fmtKwh(curtail.genDay - curtail.kwhDay)} หน่วย/วัน</b> จาก ${fmtKwh(curtail.genDay)} หน่วย/วัน`,
-                        showarrow: true, arrowhead: 2, arrowcolor: '#E53935', ax: 115, ay: -70,
-                        bgcolor: 'rgba(229,57,53,0.92)', bordercolor: '#E53935', borderwidth: 1,
-                        borderpad: 5, font: { color: '#fff', size: 11 }, align: 'left'
-                    });
-                }
                 if (curtail.days > 1) bits.push(`เฉลี่ยจาก ${curtail.days} วันในไฟล์`);
             } else if (solarTrace && curtail) {
                 bits.push('ไม่มีส่วนเกินเส้น Grid');
@@ -3845,46 +3847,79 @@
                     line: { color: '#2DD4BF', width: 2 },
                     connectgaps: false
                 });
-                const cut = battery.peakBefore - battery.peakAfter;
-                bits.push(`แบต ${fmtKwh(battery.batt.kwh)} kWh` +
-                    (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : '') +
-                    ` (DOD ${Math.round(battery.batt.dod * 100)}% = ใช้ได้ ${fmtKwh(battery.batt.usable)} kWh · 1 รอบ/วัน)`);
-                // Pinned to the corner rather than to a point on a curve: the shaved line
-                // is flat on top, so there is no peak left for an arrow to mark.
-                ann2.push({
-                    xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
-                    xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
-                    text: `🔋 <b>แบตเตอรี่ตัดพีค</b><br>` +
-                        `${fmtKwh(battery.batt.kwh)} kWh · DOD ${Math.round(battery.batt.dod * 100)}% ` +
-                        `→ ใช้ได้ <b>${fmtKwh(battery.batt.usable)} kWh</b> ` +
-                        `(ใช้ไป ${battery.cyclesDay.toFixed(2)} รอบ/วัน)<br>` +
-                        `เก็บได้รวม <b>${fmtKwh(battery.storedDay)} หน่วย/วัน</b><br>` +
-                        `&nbsp;&nbsp;• จากไฟเกิน AC ${fmtKwh(battery.fromAcDay)}<br>` +
-                        (battery.sun.clips
-                            ? `&nbsp;&nbsp;• จาก DC ที่ inverter ตัดทิ้ง <b>${fmtKwh(battery.fromClipDay)}</b><br>`
-                            : '') +
-                        `พีค <b>${battery.peakBefore.toFixed(1)} → ${battery.peakAfter.toFixed(1)} kW</b> ` +
-                        `(ลด ${cut.toFixed(1)} kW)<br>` +
-                        `ยังทิ้ง <b>${fmtKwh(battery.spillDay)} หน่วย/วัน</b>`,
-                    bgcolor: 'rgba(13, 148, 136, 0.92)', bordercolor: '#2DD4BF', borderwidth: 1,
-                    borderpad: 5, font: { color: '#fff', size: 11 }
-                });
             }
 
             if (solarTrace) traces2.push(solarTrace);
-            // Drawn after the AC line so the fill lands in the gap between them: on a
-            // hybrid inverter that gap is what the battery can still take.
-            const sun = plotSolarCurves();
+
+            // The DC side, drawn after the AC line so its fills land in the gap between
+            // them. Same two colours, same meanings, grouped with the AC bands so each
+            // appears once in the legend carrying the whole day's figure.
             if (solarTrace && sun && sun.clips) {
+                if (battery) {
+                    traces2.push({
+                        x: plotData.x,
+                        y: sun.ac.map((a, i) =>
+                            (a == null || battery.chargeClip[i] == null) ? null : a + battery.chargeClip[i]),
+                        type: 'scatter', mode: 'lines', line: { width: 0 },
+                        fill: 'tonexty', fillcolor: STORED_FILL,
+                        legendgroup: 'stored', showlegend: false,
+                        hoverinfo: 'skip', connectgaps: false
+                    });
+                }
+                traces2.push({
+                    x: plotData.x, y: sun.dc,
+                    type: 'scatter', mode: 'lines', line: { width: 0 },
+                    fill: 'tonexty', fillcolor: SPILT_FILL,
+                    legendgroup: 'spilt', showlegend: false,
+                    hoverinfo: 'skip', connectgaps: false
+                });
+                // The boundary itself, carried by a trace of its own so the legend swatch
+                // shows the dashed line rather than one of the two fills.
                 traces2.push({
                     x: plotData.x, y: sun.dc,
                     type: 'scatter', mode: 'lines',
                     name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp`,
                     line: { color: '#FB923C', width: 1, dash: 'dash' },
-                    fill: 'tonexty', fillcolor: plotFillColor('#FB923C', 0.16),
                     connectgaps: false
                 });
             }
+
+            // One box. Three of them meant hunting across the chart to find out whether a
+            // bigger battery had changed anything.
+            if (solarTrace && curtail && surplusDay > 0) {
+                const lines = [];
+                if (battery) {
+                    const cut = battery.peakBefore - battery.peakAfter;
+                    lines.push(`🔋 <b>แบต ${fmtKwh(battery.batt.kwh)} kWh` +
+                        (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : '') + `</b>`);
+                    lines.push(`DOD ${Math.round(battery.batt.dod * 100)}% → ใช้ได้ ` +
+                        `${fmtKwh(battery.batt.usable)} kWh · ใช้ไป ${battery.cyclesDay.toFixed(2)} รอบ/วัน`);
+                    lines.push(`พีค <b>${battery.peakBefore.toFixed(1)} → ${battery.peakAfter.toFixed(1)} kW</b>` +
+                        ` (ลด ${cut.toFixed(1)} kW)`);
+                    lines.push('');
+                }
+                lines.push(`ผลิต AC <b>${fmtKwh(curtail.genDay)}</b> · ใช้เองทันที ` +
+                    `<b>${fmtKwh(curtail.genDay - surplusAcDay)} หน่วย/วัน</b>`);
+                lines.push(`⚡ <b>ไฟส่วนเกิน ${fmtKwh(surplusDay)} หน่วย/วัน</b>`);
+                lines.push(`&nbsp;&nbsp;• เกินเส้น Grid ฝั่ง AC ${fmtKwh(surplusAcDay)}`);
+                if (clipDay > 0) lines.push(`&nbsp;&nbsp;• DC ที่ inverter ตัด ${fmtKwh(clipDay)}`);
+                if (battery) {
+                    const share = surplusDay > 0 ? (storedDay / surplusDay) * 100 : 0;
+                    lines.push(`🔋 แบตเก็บไป <b>${fmtKwh(storedDay)}</b> (${share.toFixed(1)}% ของส่วนเกิน)`);
+                    lines.push(`⚡ <b>ทิ้งจริง ${fmtKwh(wastedDay)} หน่วย/วัน</b>`);
+                } else {
+                    lines.push(`⚡ <b>ทิ้งทั้งหมด</b> — ยังไม่ได้ใส่แบต`);
+                }
+                ann2.push({
+                    xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
+                    xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
+                    text: lines.join('<br>'),
+                    bgcolor: battery ? 'rgba(13, 148, 136, 0.93)' : 'rgba(185, 45, 42, 0.93)',
+                    bordercolor: battery ? '#2DD4BF' : '#E53935', borderwidth: 1,
+                    borderpad: 6, font: { color: '#fff', size: 11 }
+                });
+            }
+
             if (card2) card2.style.display = traces2.length ? '' : 'none';
             if (traces2.length) {
                 Plotly.react('plot-chart-2', traces2,
