@@ -3443,9 +3443,9 @@
                 y,
                 type: 'scatter',
                 mode: 'lines',
-                name: (invLimit > 0
+                name: invLimit > 0
                     ? `โซลาร์ออกแบบ ${kwp} kWp / ${invLimit} kW`
-                    : `โซลาร์ออกแบบ ${kwp} kWp`) + peakTag(y),
+                    : `โซลาร์ออกแบบ ${kwp} kWp`,
                 line: { color: '#FFB020', width: 2, dash: 'dot' },
                 fill: 'tozeroy',
                 fillcolor: plotFillColor('#FFB020', 0.14),
@@ -3704,19 +3704,39 @@
             return sr.y.map(v => (v == null ? null : -v));
         }
 
-        // The top of the curve as it is actually drawn. A tariff with a demand charge is
-        // written against this number, so it belongs beside each line rather than only in
-        // the battery box, and it is taken from the plotted values so a flipped Grid
-        // reports the peak the chart shows.
-        function peakTag(y) {
-            if (!y) return '';
-            let m = null;
+        // A tariff with a demand charge is written against the top of a curve, so each
+        // line gets its peak marked where it happens rather than listed off to the side:
+        // read against the chart, a number at the end of a legend row says nothing about
+        // when the site is actually at its worst. Taken from the values as plotted, so a
+        // flipped Grid marks the peak the chart shows.
+        function peakOf(y) {
+            if (!y) return null;
+            let m = null, idx = -1;
             for (let i = 0; i < y.length; i++) {
                 const v = y[i];
                 if (v == null || !isFinite(v)) continue;
-                if (m == null || v > m) m = v;
+                if (m == null || v > m) { m = v; idx = i; }
             }
-            return m == null ? '' : ` · พีค ${m.toFixed(1)} kW`;
+            return idx < 0 ? null : { value: m, idx };
+        }
+
+        // nth staggers the boxes up the page: several lines can peak within minutes of
+        // each other and the labels would otherwise land on top of one another.
+        function peakMarker(y, label, color, nth, topRef) {
+            const p = peakOf(y);
+            if (!p || !plotData) return null;
+            // The highest line's own peak sets the top of the axis, so a box hung above it
+            // is drawn off the plot and never seen. Those hang below the point instead.
+            const atCeiling = topRef > 0 && p.value >= topRef * 0.98;
+            const step = 26 + (nth || 0) * 26;
+            return {
+                x: plotData.x[p.idx], y: p.value,
+                text: `${label} <b>${p.value.toFixed(1)} kW</b>`,
+                showarrow: true, arrowhead: 2, arrowsize: 1, arrowwidth: 1.5,
+                arrowcolor: color, ax: 0, ay: atCeiling ? step : -step,
+                bgcolor: 'rgba(13, 17, 23, 0.88)', bordercolor: color, borderwidth: 1,
+                borderpad: 3, font: { color: '#E6EDF3', size: 10 }
+            };
         }
 
         function plotSeriesTrace(sr) {
@@ -3728,7 +3748,7 @@
                 // The legend stays as the file labels it. Screenshots get shared, and a
                 // "(กลับเครื่องหมาย)" tag on one series reads as noise to anyone who was
                 // not here when it was ticked; the subtitle carries the convention.
-                name: sr.name + peakTag(plotSeriesValues(sr)),
+                name: sr.name,
                 line: { color: sr.color, width: 2 },
                 // several series overlap, so the shading stays faint enough to read through
                 fill: 'tozeroy',
@@ -3784,12 +3804,19 @@
             const gridSeries = selected.filter(sr => sr.isGrid);
             const solarTrace = plotSolarOverlayTrace();
 
+            const top1 = selected.reduce((m, sr) => {
+                const p = peakOf(plotSeriesValues(sr));
+                return p && p.value > m ? p.value : m;
+            }, 0);
+            const ann1 = selected
+                .map((sr, i) => peakMarker(plotSeriesValues(sr), sr.name.split(/[（(]/)[0].trim(), sr.color, i, top1))
+                .filter(Boolean);
             Plotly.react('plot-chart', selected.map(plotSeriesTrace), plotAxisLayout(
                 '📊 Average Daily Load Profile',
                 plotData.averaged
                     ? `เฉลี่ยตามเวลาในวันจาก ${plotData.fileCount} ไฟล์ · ${plotData.rows.toLocaleString()} ช่วงเวลา`
                     : `ข้อมูลดิบ ${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
-                'Power (kW)'), PLOT_CONFIG);
+                'Power (kW)', ann1), PLOT_CONFIG);
 
             const traces2 = gridSeries.map(plotSeriesTrace);
             const bits = [];
@@ -3861,7 +3888,7 @@
                 traces2.push({
                     x: plotData.x, y: battery.net,
                     type: 'scatter', mode: 'lines',
-                    name: `🔋 Grid หลังโซลาร์ + แบต` + peakTag(battery.net),
+                    name: `🔋 Grid หลังโซลาร์ + แบต`,
                     line: { color: '#2DD4BF', width: 2 },
                     connectgaps: false
                 });
@@ -3896,7 +3923,7 @@
                 traces2.push({
                     x: plotData.x, y: sun.dc,
                     type: 'scatter', mode: 'lines',
-                    name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp` + peakTag(sun.dc),
+                    name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp`,
                     line: { color: '#FB923C', width: 1, dash: 'dash' },
                     connectgaps: false
                 });
@@ -3941,6 +3968,20 @@
                 });
             }
 
+            if (solarTrace) {
+                const cand = [];
+                gridSeries.forEach(sr => cand.push([plotSeriesValues(sr), sr.name.split(/[（(]/)[0].trim(), sr.color]));
+                if (sun && sun.clips) cand.push([sun.dc, 'DC', '#FB923C']);
+                cand.push([solarTrace.y, 'โซลาร์ AC', '#FFB020']);
+                if (battery) cand.push([battery.net, 'หลังแบต', '#2DD4BF']);
+                const top2 = cand.reduce((m, c) => {
+                    const p = peakOf(c[0]);
+                    return p && p.value > m ? p.value : m;
+                }, 0);
+                cand.map((c, i) => peakMarker(c[0], c[1], c[2], i, top2))
+                    .filter(Boolean).forEach(a => ann2.push(a));
+            }
+
             if (card2) card2.style.display = traces2.length ? '' : 'none';
             if (traces2.length) {
                 Plotly.react('plot-chart-2', traces2,
@@ -3976,7 +4017,7 @@
             const battKwh = battery ? units(battery.net) : null;
 
             const line = (y, name, color, dash) => ({
-                x: plotData.x, y, type: 'scatter', mode: 'lines', name: name + peakTag(y),
+                x: plotData.x, y, type: 'scatter', mode: 'lines', name,
                 line: Object.assign({ color, width: 2 }, dash ? { dash } : {}),
                 fill: 'tozeroy', fillcolor: plotFillColor(color, 0.12),
                 connectgaps: false
@@ -3990,6 +4031,15 @@
                 traces.push(line(battBuy,
                     `หลังโซลาร์ + แบต ${fmtKwh(battKwh)} หน่วย/วัน`, '#2DD4BF'));
             }
+            const top3 = [nowBuy, afterBuy, battBuy].reduce((m, y) => {
+                const p = y ? peakOf(y) : null;
+                return p && p.value > m ? p.value : m;
+            }, 0);
+            const marks3 = [
+                peakMarker(nowBuy, 'ปัจจุบัน', '#EB85FF', 0, top3),
+                peakMarker(afterBuy, 'หลังโซลาร์', '#FFB020', 1, top3)
+            ];
+            if (battBuy) marks3.push(peakMarker(battBuy, 'หลังแบต', '#2DD4BF', 2, top3));
 
             const finalKwh = battBuy ? battKwh : afterKwh;
             const saved = nowKwh - finalKwh;
@@ -3998,7 +4048,8 @@
             bits.push(`เทียบกับ ${load.name}`);
             if (days > 1) bits.push(`เฉลี่ยจาก ${days} วันในไฟล์`);
 
-            const ann = [{
+            const ann = marks3.filter(Boolean);
+            ann.push({
                 xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
                 xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
                 text: `⚡ <b>ไฟที่ยังต้องซื้อ</b><br>` +
@@ -4006,7 +4057,7 @@
                     `ลดลง <b>${fmtKwh(saved)} หน่วย/วัน</b> (${pct.toFixed(1)}%)`,
                 bgcolor: 'rgba(88, 166, 255, 0.92)', bordercolor: '#58A6FF', borderwidth: 1,
                 borderpad: 5, font: { color: '#fff', size: 11 }
-            }];
+            });
 
             Plotly.react('plot-chart-3', traces,
                 plotAxisLayout('⚡ ไฟที่ยังต้องซื้อจากการไฟฟ้า',
