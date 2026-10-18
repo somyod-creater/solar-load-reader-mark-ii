@@ -3443,9 +3443,9 @@
                 y,
                 type: 'scatter',
                 mode: 'lines',
-                name: invLimit > 0
+                name: (invLimit > 0
                     ? `โซลาร์ออกแบบ ${kwp} kWp / ${invLimit} kW`
-                    : `โซลาร์ออกแบบ ${kwp} kWp`,
+                    : `โซลาร์ออกแบบ ${kwp} kWp`) + peakTag(y),
                 line: { color: '#FFB020', width: 2, dash: 'dot' },
                 fill: 'tozeroy',
                 fillcolor: plotFillColor('#FFB020', 0.14),
@@ -3704,6 +3704,21 @@
             return sr.y.map(v => (v == null ? null : -v));
         }
 
+        // The top of the curve as it is actually drawn. A tariff with a demand charge is
+        // written against this number, so it belongs beside each line rather than only in
+        // the battery box, and it is taken from the plotted values so a flipped Grid
+        // reports the peak the chart shows.
+        function peakTag(y) {
+            if (!y) return '';
+            let m = null;
+            for (let i = 0; i < y.length; i++) {
+                const v = y[i];
+                if (v == null || !isFinite(v)) continue;
+                if (m == null || v > m) m = v;
+            }
+            return m == null ? '' : ` · พีค ${m.toFixed(1)} kW`;
+        }
+
         function plotSeriesTrace(sr) {
             return {
                 x: plotData.x,
@@ -3713,7 +3728,7 @@
                 // The legend stays as the file labels it. Screenshots get shared, and a
                 // "(กลับเครื่องหมาย)" tag on one series reads as noise to anyone who was
                 // not here when it was ticked; the subtitle carries the convention.
-                name: sr.name,
+                name: sr.name + peakTag(plotSeriesValues(sr)),
                 line: { color: sr.color, width: 2 },
                 // several series overlap, so the shading stays faint enough to read through
                 fill: 'tozeroy',
@@ -3846,7 +3861,7 @@
                 traces2.push({
                     x: plotData.x, y: battery.net,
                     type: 'scatter', mode: 'lines',
-                    name: `🔋 Grid หลังโซลาร์ + แบต`,
+                    name: `🔋 Grid หลังโซลาร์ + แบต` + peakTag(battery.net),
                     line: { color: '#2DD4BF', width: 2 },
                     connectgaps: false
                 });
@@ -3881,7 +3896,7 @@
                 traces2.push({
                     x: plotData.x, y: sun.dc,
                     type: 'scatter', mode: 'lines',
-                    name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp`,
+                    name: `DC ก่อนจำกัด ${fmtKwh(sun.kwp)} kWp` + peakTag(sun.dc),
                     line: { color: '#FB923C', width: 1, dash: 'dash' },
                     connectgaps: false
                 });
@@ -3961,7 +3976,7 @@
             const battKwh = battery ? units(battery.net) : null;
 
             const line = (y, name, color, dash) => ({
-                x: plotData.x, y, type: 'scatter', mode: 'lines', name,
+                x: plotData.x, y, type: 'scatter', mode: 'lines', name: name + peakTag(y),
                 line: Object.assign({ color, width: 2 }, dash ? { dash } : {}),
                 fill: 'tozeroy', fillcolor: plotFillColor(color, 0.12),
                 connectgaps: false
