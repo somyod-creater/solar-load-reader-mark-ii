@@ -3722,6 +3722,52 @@
 
         // nth staggers the boxes up the page: several lines can peak within minutes of
         // each other and the labels would otherwise land on top of one another.
+        // A marker belongs to its line, so hiding the line from the legend should take
+        // the marker with it. Plotly does that for traces but not for annotations, and
+        // clicking a legend entry never reaches this code, so the chart keeps a register
+        // of which marker goes with which trace and re-filters on every restyle. The
+        // handler is re-attached each redraw because Plotly.react replaces the bindings
+        // along with the data.
+        const plotPeakReg = {};
+
+        function plotPeaksOn() {
+            const el = document.getElementById('plotShowPeaks');
+            return !el || el.checked;
+        }
+
+        function applyPlotPeaks(id) {
+            const reg = plotPeakReg[id];
+            const gd = document.getElementById(id);
+            if (!reg || !gd || !gd.data) return;
+            const shown = plotPeaksOn()
+                ? reg.markers.filter(m => {
+                    const t = gd.data[m.idx];
+                    return t && t.visible !== 'legendonly' && t.visible !== false;
+                }).map(m => m.ann)
+                : [];
+            Plotly.relayout(gd, { annotations: reg.other.concat(shown) });
+        }
+
+        // markers: [{ ann, y }] - y is the very array the trace was given, so the trace it
+        // belongs to is found by identity rather than by a position that could drift.
+        function registerPlotPeaks(id, traces, markers, other) {
+            const gd = document.getElementById(id);
+            if (!gd) return;
+            plotPeakReg[id] = {
+                other: other || [],
+                markers: markers.filter(Boolean).map(m => ({
+                    ann: m.ann, idx: traces.findIndex(t => t.y === m.y)
+                })).filter(m => m.idx >= 0)
+            };
+            applyPlotPeaks(id);
+            try { gd.removeAllListeners && gd.removeAllListeners('plotly_restyle'); } catch (e) { }
+            if (gd.on) gd.on('plotly_restyle', () => applyPlotPeaks(id));
+        }
+
+        function redrawPlotPeaks() {
+            Object.keys(plotPeakReg).forEach(applyPlotPeaks);
+        }
+
         function peakMarker(y, label, color, nth, topRef) {
             const p = peakOf(y);
             if (!p || !plotData) return null;
@@ -3804,19 +3850,22 @@
             const gridSeries = selected.filter(sr => sr.isGrid);
             const solarTrace = plotSolarOverlayTrace();
 
-            const top1 = selected.reduce((m, sr) => {
-                const p = peakOf(plotSeriesValues(sr));
+            const traces1 = selected.map(plotSeriesTrace);
+            const top1 = traces1.reduce((m, t) => {
+                const p = peakOf(t.y);
                 return p && p.value > m ? p.value : m;
             }, 0);
-            const ann1 = selected
-                .map((sr, i) => peakMarker(plotSeriesValues(sr), sr.name.split(/[（(]/)[0].trim(), sr.color, i, top1))
-                .filter(Boolean);
-            Plotly.react('plot-chart', selected.map(plotSeriesTrace), plotAxisLayout(
+            const marks1 = traces1.map((t, i) => ({
+                y: t.y,
+                ann: peakMarker(t.y, selected[i].name.split(/[（(]/)[0].trim(), selected[i].color, i, top1)
+            })).filter(m => m.ann);
+            Plotly.react('plot-chart', traces1, plotAxisLayout(
                 '📊 Average Daily Load Profile',
                 plotData.averaged
                     ? `เฉลี่ยตามเวลาในวันจาก ${plotData.fileCount} ไฟล์ · ${plotData.rows.toLocaleString()} ช่วงเวลา`
                     : `ข้อมูลดิบ ${plotData.rows.toLocaleString()} แถว · ${plotData.series.length} คอลัมน์ตัวเลข`,
-                'Power (kW)', ann1), PLOT_CONFIG);
+                'Power (kW)'), PLOT_CONFIG);
+            registerPlotPeaks('plot-chart', traces1, marks1, []);
 
             const traces2 = gridSeries.map(plotSeriesTrace);
             const bits = [];
@@ -3968,9 +4017,13 @@
                 });
             }
 
+            const marks2 = [];
             if (solarTrace) {
                 const cand = [];
-                gridSeries.forEach(sr => cand.push([plotSeriesValues(sr), sr.name.split(/[（(]/)[0].trim(), sr.color]));
+                // Taken off the trace rather than recomputed: plotSeriesValues() hands back
+                // a fresh array for a flipped Grid, and the register matches a marker to
+                // its line by array identity.
+                gridSeries.forEach((sr, i) => cand.push([traces2[i].y, sr.name.split(/[（(]/)[0].trim(), sr.color]));
                 if (sun && sun.clips) cand.push([sun.dc, 'DC', '#FB923C']);
                 cand.push([solarTrace.y, 'โซลาร์ AC', '#FFB020']);
                 if (battery) cand.push([battery.net, 'หลังแบต', '#2DD4BF']);
@@ -3978,8 +4031,10 @@
                     const p = peakOf(c[0]);
                     return p && p.value > m ? p.value : m;
                 }, 0);
-                cand.map((c, i) => peakMarker(c[0], c[1], c[2], i, top2))
-                    .filter(Boolean).forEach(a => ann2.push(a));
+                cand.forEach((c, i) => {
+                    const ann = peakMarker(c[0], c[1], c[2], i, top2);
+                    if (ann) marks2.push({ y: c[0], ann });
+                });
             }
 
             if (card2) card2.style.display = traces2.length ? '' : 'none';
@@ -3987,6 +4042,7 @@
                 Plotly.react('plot-chart-2', traces2,
                     plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)', ann2),
                     PLOT_CONFIG);
+                registerPlotPeaks('plot-chart-2', traces2, marks2, ann2);
                 setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
             }
 
@@ -4036,10 +4092,10 @@
                 return p && p.value > m ? p.value : m;
             }, 0);
             const marks3 = [
-                peakMarker(nowBuy, 'ปัจจุบัน', '#EB85FF', 0, top3),
-                peakMarker(afterBuy, 'หลังโซลาร์', '#FFB020', 1, top3)
+                { y: nowBuy, ann: peakMarker(nowBuy, 'ปัจจุบัน', '#EB85FF', 0, top3) },
+                { y: afterBuy, ann: peakMarker(afterBuy, 'หลังโซลาร์', '#FFB020', 1, top3) }
             ];
-            if (battBuy) marks3.push(peakMarker(battBuy, 'หลังแบต', '#2DD4BF', 2, top3));
+            if (battBuy) marks3.push({ y: battBuy, ann: peakMarker(battBuy, 'หลังแบต', '#2DD4BF', 2, top3) });
 
             const finalKwh = battBuy ? battKwh : afterKwh;
             const saved = nowKwh - finalKwh;
@@ -4048,7 +4104,7 @@
             bits.push(`เทียบกับ ${load.name}`);
             if (days > 1) bits.push(`เฉลี่ยจาก ${days} วันในไฟล์`);
 
-            const ann = marks3.filter(Boolean);
+            const ann = [];
             ann.push({
                 xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
                 xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
@@ -4063,6 +4119,7 @@
                 plotAxisLayout('⚡ ไฟที่ยังต้องซื้อจากการไฟฟ้า',
                     bits.join(' · '), 'Power (kW)', ann),
                 PLOT_CONFIG);
+            registerPlotPeaks('plot-chart-3', traces, marks3.filter(m => m.ann), ann);
             setTimeout(() => { try { Plotly.Plots.resize('plot-chart-3'); } catch (e) { } }, 30);
         }
 

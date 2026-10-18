@@ -793,6 +793,10 @@
                                 <label for="plotBattKwInput">กำลังชาร์จ/จ่าย (kW)<span class="hint">อัตราเข้า-ออกสูงสุดของแบต · ใส่ 0 คือไม่จำกัด</span></label>
                                 <input type="number" id="plotBattKwInput" value="0" min="0" step="10" onchange="drawPlotChart()">
                             </div>
+                            <label class="plot-series-item" for="plotShowPeaks" style="margin-top: 4px;">
+                                <input type="checkbox" id="plotShowPeaks" checked onchange="redrawPlotPeaks()">
+                                <span class="plot-series-name" title="ปิดป้ายพีคทั้งหมด · หรือคลิกชื่อเส้นใน legend เพื่อซ่อนทีละเส้น">แสดงป้ายพีคบนกราฟ</span>
+                            </label>
                             <label class="plot-series-item" for="plotGridFlip" style="margin-top: 4px;">
                                 <input type="checkbox" id="plotGridFlip" onchange="drawPlotChart()">
                                 <span class="plot-series-name" title="ข้อมูลดิบติดลบตอนขายไฟออก — ติ๊กเพื่อกลับด้านให้ขายไฟเป็นบวก">กลับเครื่องหมาย Grid (ขายไฟ = บวก)</span>
