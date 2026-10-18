@@ -3735,54 +3735,112 @@
             return !el || el.checked;
         }
 
+        // Labels dismissed one at a time, kept by label text so the choice survives a
+        // redraw when a kWp or a battery size changes.
+        const plotPeakHidden = {};
+
         function applyPlotPeaks(id) {
             const reg = plotPeakReg[id];
             const gd = document.getElementById(id);
             if (!reg || !gd || !gd.data) return;
-            const shown = plotPeaksOn()
+            const hidden = plotPeakHidden[id] || (plotPeakHidden[id] = {});
+            reg.shown = plotPeaksOn()
                 ? reg.markers.filter(m => {
+                    if (hidden[m.key]) return false;
                     const t = gd.data[m.idx];
                     return t && t.visible !== 'legendonly' && t.visible !== false;
-                }).map(m => m.ann)
+                })
                 : [];
-            Plotly.relayout(gd, { annotations: reg.other.concat(shown) });
+            Plotly.relayout(gd, { annotations: reg.other.concat(reg.shown.map(m => m.ann)) });
         }
 
-        // markers: [{ ann, y }] - y is the very array the trace was given, so the trace it
-        // belongs to is found by identity rather than by a position that could drift.
+        // markers: [{ ann, y, key }] - y is the very array the trace was given, so the
+        // trace it belongs to is found by identity rather than by a position that could
+        // drift.
         function registerPlotPeaks(id, traces, markers, other) {
             const gd = document.getElementById(id);
             if (!gd) return;
             plotPeakReg[id] = {
                 other: other || [],
                 markers: markers.filter(Boolean).map(m => ({
-                    ann: m.ann, idx: traces.findIndex(t => t.y === m.y)
+                    ann: m.ann, key: m.key, idx: traces.findIndex(t => t.y === m.y)
                 })).filter(m => m.idx >= 0)
             };
             applyPlotPeaks(id);
             try { gd.removeAllListeners && gd.removeAllListeners('plotly_restyle'); } catch (e) { }
-            if (gd.on) gd.on('plotly_restyle', () => applyPlotPeaks(id));
+            try { gd.removeAllListeners && gd.removeAllListeners('plotly_clickannotation'); } catch (e) { }
+            if (!gd.on) return;
+            gd.on('plotly_restyle', () => applyPlotPeaks(id));
+            // Clicking the label itself drops just that label. Hiding it from the legend
+            // would have taken the line with it, which is not the same request.
+            //
+            // The label is identified by what was clicked, not by its position in the
+            // list. A draggable label reports one click twice, and by the second report
+            // the first has already removed a label - so a position would land on the
+            // next one along and take that out too. By identity, the repeat is a no-op.
+            gd.on('plotly_clickannotation', ev => {
+                const r = plotPeakReg[id];
+                if (!r) return;
+                const txt = ev && (ev.annotation || ev.fullAnnotation || {}).text;
+                const hit = r.markers.find(m => m.ann.text === txt);
+                if (!hit) return;
+                const hidden = (plotPeakHidden[id] = plotPeakHidden[id] || {});
+                if (hidden[hit.key]) return;
+                hidden[hit.key] = true;
+                applyPlotPeaks(id);
+            });
         }
 
         function redrawPlotPeaks() {
+            // Ticking the box back on is the way to get dismissed labels back.
+            if (plotPeaksOn()) Object.keys(plotPeakHidden).forEach(k => { plotPeakHidden[k] = {}; });
             Object.keys(plotPeakReg).forEach(applyPlotPeaks);
         }
 
-        function peakMarker(y, label, color, nth, topRef) {
+        function peakMarker(y, label, color, topRef) {
             const p = peakOf(y);
             if (!p || !plotData) return null;
             // The highest line's own peak sets the top of the axis, so a box hung above it
             // is drawn off the plot and never seen. Those hang below the point instead.
-            const atCeiling = topRef > 0 && p.value >= topRef * 0.98;
-            const step = 26 + (nth || 0) * 26;
+            const below = topRef > 0 && p.value >= topRef * 0.98;
             return {
-                x: plotData.x[p.idx], y: p.value,
-                text: `${label} <b>${p.value.toFixed(1)} kW</b>`,
-                showarrow: true, arrowhead: 2, arrowsize: 1, arrowwidth: 1.5,
-                arrowcolor: color, ax: 0, ay: atCeiling ? step : -step,
-                bgcolor: 'rgba(13, 17, 23, 0.88)', bordercolor: color, borderwidth: 1,
-                borderpad: 3, font: { color: '#E6EDF3', size: 10 }
+                y, key: label, at: p.idx, below,
+                ann: {
+                    x: plotData.x[p.idx], y: p.value,
+                    text: `${label} <b>${p.value.toFixed(1)} kW</b>`,
+                    showarrow: true, arrowhead: 2, arrowsize: 1, arrowwidth: 1.5,
+                    arrowcolor: color, ax: 0, ay: below ? 26 : -26,
+                    captureevents: true, hovertext: 'คลิกเพื่อซ่อนป้ายนี้',
+                    bgcolor: 'rgba(13, 17, 23, 0.88)', bordercolor: color, borderwidth: 1,
+                    borderpad: 3, font: { color: '#E6EDF3', size: 10 }
+                }
             };
+        }
+
+        // Stacking by list position pushed a lone label three rows up for no reason while
+        // two peaks minutes apart still landed on top of each other. Each label is raised
+        // only over the ones it would actually collide with, judged by how far apart in
+        // the day the two peaks are.
+        //
+        // Two labels can collide from opposite sides too - one hung below a ceiling peak,
+        // the other raised above a peak just under it, meeting in the middle - so every
+        // nearby label counts, whichever way it points. Crowded ones are pushed out
+        // sideways rather than further up, which keeps clear of the plot's top edge and
+        // stops one label's arrow running through another's box.
+        const PEAK_SPREAD = [[0, 26], [-90, 34], [90, 34], [-90, 64], [90, 64]];
+        function layoutPeakMarkers(marks) {
+            const span = (plotData && plotData.x) ? plotData.x.length : 0;
+            const near = Math.max(4, Math.round(span * 0.08));
+            const placed = [];
+            marks.filter(Boolean).forEach(m => {
+                let level = 0;
+                while (placed.some(p => p.level === level && Math.abs(p.at - m.at) <= near)) level++;
+                placed.push({ at: m.at, level });
+                const [ax, dy] = PEAK_SPREAD[Math.min(level, PEAK_SPREAD.length - 1)];
+                m.ann.ax = ax;
+                m.ann.ay = m.below ? dy : -dy;
+            });
+            return marks.filter(Boolean);
         }
 
         function plotSeriesTrace(sr) {
@@ -3855,10 +3913,8 @@
                 const p = peakOf(t.y);
                 return p && p.value > m ? p.value : m;
             }, 0);
-            const marks1 = traces1.map((t, i) => ({
-                y: t.y,
-                ann: peakMarker(t.y, selected[i].name.split(/[（(]/)[0].trim(), selected[i].color, i, top1)
-            })).filter(m => m.ann);
+            const marks1 = layoutPeakMarkers(traces1.map((t, i) =>
+                peakMarker(t.y, selected[i].name.split(/[（(]/)[0].trim(), selected[i].color, top1)));
             Plotly.react('plot-chart', traces1, plotAxisLayout(
                 '📊 Average Daily Load Profile',
                 plotData.averaged
@@ -3986,30 +4042,33 @@
                     const cut = battery.peakBefore - battery.peakAfter;
                     lines.push(`🔋 <b>แบต ${fmtKwh(battery.batt.kwh)} kWh` +
                         (isFinite(battery.batt.kw) ? ` / ${fmtKwh(battery.batt.kw)} kW` : '') + `</b>`);
-                    lines.push(`DOD ${Math.round(battery.batt.dod * 100)}% → ใช้ได้ ` +
-                        `${fmtKwh(battery.batt.usable)} kWh · ใช้ไป ${battery.cyclesDay.toFixed(2)} รอบ/วัน`);
+                    lines.push(`DOD ${Math.round(battery.batt.dod * 100)}% → ใช้ได้ ${fmtKwh(battery.batt.usable)} kWh`);
+                    lines.push(`ใช้ไป ${battery.cyclesDay.toFixed(2)} รอบ/วัน`);
                     lines.push(`พีค <b>${battery.peakBefore.toFixed(1)} → ${battery.peakAfter.toFixed(1)} kW</b>` +
                         ` (ลด ${cut.toFixed(1)} kW)`);
                     lines.push('');
                 }
-                lines.push(`ผลิต AC <b>${fmtKwh(curtail.genDay)}</b> · ใช้เองทันที ` +
-                    `<b>${fmtKwh(curtail.genDay - surplusAcDay)} หน่วย/วัน</b>`);
+                lines.push(`ผลิต AC <b>${fmtKwh(curtail.genDay)}</b> หน่วย/วัน`);
+                lines.push(`ใช้เองทันที <b>${fmtKwh(curtail.genDay - surplusAcDay)}</b>`);
                 lines.push(`⚡ <b>ไฟส่วนเกิน ${fmtKwh(surplusDay)} หน่วย/วัน</b>`);
                 lines.push(`&nbsp;&nbsp;• เกินเส้น Grid ฝั่ง AC ${fmtKwh(surplusAcDay)}`);
                 if (clipDay > 0) lines.push(`&nbsp;&nbsp;• DC ที่ inverter ตัด ${fmtKwh(clipDay)}`);
                 if (battery) {
                     const share = surplusDay > 0 ? (storedDay / surplusDay) * 100 : 0;
-                    lines.push(`🔋 แบตเก็บไป <b>${fmtKwh(storedDay)}</b> (${share.toFixed(1)}% ของส่วนเกิน)`);
+                    lines.push(`🔋 แบตเก็บไป <b>${fmtKwh(storedDay)}</b> (${share.toFixed(1)}%)`);
                 }
                 // Quoted against the DC the array could have made, which is the
                 // denominator a proposal is read against.
                 const curtailPct = dcGenDay > 0 ? (wastedDay / dcGenDay) * 100 : 0;
-                lines.push(`⚡ <b>ทิ้งจริง (Curtailment) ${fmtKwh(wastedDay)} หน่วย/วัน</b>` +
-                    ` · ${curtailPct.toFixed(1)}% ของ ${fmtKwh(dcGenDay)} ที่แผงผลิตได้` +
-                    (battery ? '' : ' — ยังไม่ได้ใส่แบต'));
+                lines.push(`⚡ <b>ทิ้งจริง (Curtailment)</b>`);
+                lines.push(`<b>${fmtKwh(wastedDay)} หน่วย/วัน</b> · ${curtailPct.toFixed(1)}% ของ DC ${fmtKwh(dcGenDay)}` +
+                    (battery ? '' : '<br>ยังไม่ได้ใส่แบต'));
+                // Sat inside the plot it covered the very peaks it was summarising - the
+                // array's and the DC's both fall in the left half of the day. Under the
+                // legend, outside the plot, no peak label can ever land on it.
                 ann2.push({
-                    xref: 'paper', yref: 'paper', x: 0.02, y: 0.98,
-                    xanchor: 'left', yanchor: 'top', showarrow: false, align: 'left',
+                    xref: 'paper', yref: 'paper', x: 1.02, y: 0,
+                    xanchor: 'left', yanchor: 'bottom', showarrow: false, align: 'left',
                     text: lines.join('<br>'),
                     bgcolor: battery ? 'rgba(13, 148, 136, 0.93)' : 'rgba(185, 45, 42, 0.93)',
                     bordercolor: battery ? '#2DD4BF' : '#E53935', borderwidth: 1,
@@ -4031,17 +4090,15 @@
                     const p = peakOf(c[0]);
                     return p && p.value > m ? p.value : m;
                 }, 0);
-                cand.forEach((c, i) => {
-                    const ann = peakMarker(c[0], c[1], c[2], i, top2);
-                    if (ann) marks2.push({ y: c[0], ann });
-                });
+                layoutPeakMarkers(cand.map(c => peakMarker(c[0], c[1], c[2], top2)))
+                    .forEach(m => marks2.push(m));
             }
 
             if (card2) card2.style.display = traces2.length ? '' : 'none';
             if (traces2.length) {
-                Plotly.react('plot-chart-2', traces2,
-                    plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)', ann2),
-                    PLOT_CONFIG);
+                const layout2 = plotAxisLayout('☀️ Proposed Solar System vs Grid', bits.join(' · '), 'Power (kW)', ann2);
+                if (ann2.length) layout2.margin = Object.assign({}, layout2.margin, { r: 250 });
+                Plotly.react('plot-chart-2', traces2, layout2, PLOT_CONFIG);
                 registerPlotPeaks('plot-chart-2', traces2, marks2, ann2);
                 setTimeout(() => { try { Plotly.Plots.resize('plot-chart-2'); } catch (e) { } }, 30);
             }
@@ -4091,11 +4148,12 @@
                 const p = y ? peakOf(y) : null;
                 return p && p.value > m ? p.value : m;
             }, 0);
-            const marks3 = [
-                { y: nowBuy, ann: peakMarker(nowBuy, 'ปัจจุบัน', '#EB85FF', 0, top3) },
-                { y: afterBuy, ann: peakMarker(afterBuy, 'หลังโซลาร์', '#FFB020', 1, top3) }
+            const marks3raw = [
+                peakMarker(nowBuy, 'ปัจจุบัน', '#EB85FF', top3),
+                peakMarker(afterBuy, 'หลังโซลาร์', '#FFB020', top3)
             ];
-            if (battBuy) marks3.push({ y: battBuy, ann: peakMarker(battBuy, 'หลังแบต', '#2DD4BF', 2, top3) });
+            if (battBuy) marks3raw.push(peakMarker(battBuy, 'หลังแบต', '#2DD4BF', top3));
+            const marks3 = layoutPeakMarkers(marks3raw);
 
             const finalKwh = battBuy ? battKwh : afterKwh;
             const saved = nowKwh - finalKwh;
@@ -4119,7 +4177,7 @@
                 plotAxisLayout('⚡ ไฟที่ยังต้องซื้อจากการไฟฟ้า',
                     bits.join(' · '), 'Power (kW)', ann),
                 PLOT_CONFIG);
-            registerPlotPeaks('plot-chart-3', traces, marks3.filter(m => m.ann), ann);
+            registerPlotPeaks('plot-chart-3', traces, marks3, ann);
             setTimeout(() => { try { Plotly.Plots.resize('plot-chart-3'); } catch (e) { } }, 30);
         }
 
