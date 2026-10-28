@@ -1,0 +1,181 @@
+                  <option value="pea_2_2_1">ประเภท 2.2.1 กิจการขนาดเล็ก TOU (22–33 kV)</option>
+                                <option value="pea_2_1_2">ประเภท 2.1.2 กิจการขนาดเล็ก ปกติ (&lt; 22 kV)</option>
+                                <option value="pea_2_1_1">ประเภท 2.1.1 กิจการขนาดเล็ก ปกติ (22–33 kV)</option>
+                                <option value="pea_3_1_2">ประเภท 3.1.2 กิจการขนาดกลาง ปกติ (22–33 kV)</option>
+                                <option value="pea_3_1_3">ประเภท 3.1.3 กิจการขนาดกลาง ปกติ (&lt; 22 kV)</option>
+                            </optgroup>
+                            <optgroup label="🏠 บ้านอยู่อาศัย (Residential)">
+                                <option value="pea_1_2_2">ประเภท 1.2.2 บ้านอยู่อาศัย TOU (&lt; 22 kV)</option>
+                                <option value="pea_1_2_1">ประเภท 1.2.1 บ้านอยู่อาศัย TOU (22–33 kV)</option>
+                                <option value="pea_1_1_2">ประเภท 1.1.2 บ้านอยู่อาศัย ปกติ (&gt; 150 หน่วย/เดือน)
+                                </option>
+                                <option value="pea_1_1_1">ประเภท 1.1.1 บ้านอยู่อาศัย ปกติ (&le; 150 หน่วย/เดือน)
+                                </option>
+                            </optgroup>
+                            <optgroup label="🏛️ องค์กร / เกษตรกรรม / ชั่วคราว (Other)">
+                                <option value="pea_6_2_2">ประเภท 6.2 องค์กรไม่แสวงหากำไร TOU (22–33 kV)</option>
+                                <option value="pea_7_2_1">ประเภท 7.2 สูบน้ำเพื่อการเกษตร TOU (22–33 kV)</option>
+                                <option value="pea_8">ประเภท 8 ไฟฟ้าชั่วคราว (6.8025 ฿)</option>
+                            </optgroup>
+                            <optgroup label="⚙️ กำหนดเอง (Custom)">
+                                <option value="custom">กำหนดเอง (Custom Rate)</option>
+                            </optgroup>
+                        </select>
+                        <div id="tariffInfoBadge" class="info-badge">
+                            ⚡ <b>On-Peak:</b> 4.1839 ฿ | <b>Off-Peak:</b> 2.6037 ฿ | <b>Demand:</b> 132.93 ฿/kW
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>On-Peak Rate (Baht/kWh):<br><span class="hint">ค่าไฟช่วง Peak /
+                                กลางวัน</span></label>
+                        <input type="number" id="rateInput" value="4.1839" min="0" step="0.0001"
+                            onchange="onManualRateChange()">
+                    </div>
+                    <div class="control-group" id="offPeakRateGroup">
+                        <label>Off-Peak Rate (Baht/kWh):<br><span class="hint">ค่าไฟช่วง Off-Peak /
+                                กลางคืน</span></label>
+                        <input type="number" id="offPeakRateInput" value="2.6037" min="0" step="0.0001"
+                            onchange="onManualRateChange()">
+                    </div>
+                    <div class="control-group" id="demandRateGroup">
+                        <label>Demand Charge (Baht/kW):<br><span class="hint">ค่าความต้องการพลังไฟฟ้า/เดือน</span></label>
+                        <input type="number" id="demandRateInput" value="132.93" min="0" step="0.01"
+                            onchange="onManualRateChange()">
+                    </div>
+                    <div class="control-group">
+                        <label>Ft Charge (Baht/kWh):<br><span class="hint">ค่า
+                                Ft ผันแปร (บวกเพิ่มต่อหน่วย)</span></label>
+                        <input type="number" id="ftInput" value="0.0000" step="0.0001" onchange="updateDashboard()">
+                    </div>
+                </div>
+
+                <!-- BESS Configuration Panel -->
+                <div id="bessPanel" class="panel">
+                    <h4><span class="accent" style="background: #2DD4BF;"></span>Battery storage (BESS)</h4>
+                    <div class="control-group stack">
+                        <label>Battery Charging Priority:</label>
+                        <!-- background colours are toggled by app.js (setBatteryMode) -->
+                        <div style="display: flex; gap: 10px; width: 100%;">
+                            <button id="btnLoadFirst" type="button" class="mode-btn" onclick="setBatteryMode('load_first')"
+                                style="background: #6f42c1;">Load First (Support load first)</button>
+                            <button id="btnBatteryFirst" type="button" class="mode-btn" onclick="setBatteryMode('battery_first')"
+                                style="background: #6c757d;">Battery First (Charge battery first)</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Battery Capacity (kWh):</label>
+                        <input type="number" id="batCapInput" value="500" min="0" step="50">
+                    </div>
+                    <div class="control-group">
+                        <label>PCS Size / AC Output (kW):<br><span class="hint">กำลังชาร์จ/ดิสชาร์จสูงสุดของ PCS แยกจาก Inverter Limit ของโซลาร์</span></label>
+                        <input type="number" id="pcsInput" value="500" min="0" step="50">
+                    </div>
+                    <div class="control-group">
+                        <label>Depth of Discharge (DOD %):<br><span class="hint">Max battery discharge depth
+                                (10–100%)</span></label>
+                        <input type="number" id="dodInput" value="80" min="10" max="100" step="5"
+                            onchange="updateDashboard()">
+                    </div>
+
+                    <div class="control-group">
+                        <label>Battery Cost (Baht/kWh):</label>
+                        <input type="number" id="batCostInput" value="10000" min="0" step="500">
+                    </div>
+                    <div class="control-group">
+                        <label>Peak Shaving Target (kW):<br><span class="hint">🔄 Auto-optimised —
+                                คำนวณให้อัตโนมัติทุกครั้ง</span></label>
+                        <div class="inline-input">
+                            <input type="number" id="peakTargetInput" value="0" min="0" step="20">
+                            <button type="button" class="btn-sm btn-bess" onclick="autoCalcPeakTarget()">Auto</button>
+                        </div>
+                    </div>
+                    <div class="control-group toggle-row">
+                        <label for="gridChargeInput">🔌 Grid Charge<br><span class="hint">Charge battery from
+                                grid during Off-Peak (22:00–08:00)</span></label>
+                        <input type="checkbox" id="gridChargeInput" onchange="updateDashboard()">
+                    </div>
+                </div>
+            </div>
+
+            </div><!-- end input-layout -->
+
+            <div class="action-bar" data-wizard-section="run">
+                <div class="action-bar-copy" id="wizardRunCopy">
+                    <strong>ขั้นที่ 3</strong> — ตรวจค่าแล้วกด Run เพื่อไปหน้า Summary
+                </div>
+                <button type="button" class="btn-primary" data-wizard-next onclick="wizardNext()">ถัดไป →</button>
+                <button id="calcBtn" class="btn-primary" data-wizard-run onclick="runAndShowSummary()">Run — คำนวณ &amp; ดู Summary</button>
+                <button type="button" class="btn-ghost" onclick="switchTab('tab-summary', event)">ดูหน้า Summary →</button>
+                <button type="button" class="btn-ghost" data-wizard-only onclick="setWizardStep(2)">← กลับไปตั้งค่า</button>
+            </div>
+        </div><!-- end tab-input -->
+
+        <!-- Tab 2: Summary (หลังกด Run) -->
+        <div id="tab-summary" class="tab-page">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">Summary</h2>
+                    <p class="page-sub">คำตอบหลักในหน้าเดียว · กด Run จาก Input Data เพื่ออัปเดต</p>
+                </div>
+                <div class="page-actions" id="summaryActions" hidden>
+                    <button type="button" class="btn-secondary" onclick="exportProposal()">Export ข้อเสนอ</button>
+                    <button type="button" class="btn-ghost" onclick="switchTab('tab-finance', event)">รายละเอียด Finance →</button>
+                </div>
+            </div>
+
+            <div id="summaryEmpty" class="summary-empty">
+                <div class="summary-empty-card">
+                    <p class="summary-empty-title">ยังไม่มีผลการคำนวณ</p>
+                    <p class="summary-empty-sub">กดใส่ตัวอย่างบ้านด้านล่าง หรือไปอัปโหลดไฟล์เองที่ Input Data แล้วกด Run</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+                        <button type="button" class="btn-primary" onclick="loadHouseholdSample({ run: true })">ใส่ตัวอย่างบ้าน 1 เดือน</button>
+                        <button type="button" class="btn-ghost" onclick="switchTab('tab-input', event)">ไปที่ Input Data</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="summaryReady" class="summary-ready" hidden>
+                <section class="summary-hero">
+                    <div class="summary-hero-top">
+                        <div>
+                            <div class="summary-kicker" id="summaryScenario">Solar only</div>
+                            <h3 class="summary-headline" id="summaryHeadline">ผลสรุปโครงการ</h3>
+                            <p class="summary-lede" id="summaryLede">—</p>
+                        </div>
+                        <div class="summary-payback-pill" id="summaryPaybackPill">
+                            <span class="summary-payback-label">Payback</span>
+                            <span class="summary-payback-value" id="summaryPayback">—</span>
+                        </div>
+                    </div>
+                    <div class="summary-kpi-grid">
+                        <article class="summary-kpi">
+                            <div class="summary-kpi-label">ขนาดระบบ</div>
+                            <div class="summary-kpi-value" id="summarySize">—</div>
+                            <div class="summary-kpi-sub" id="summarySizeSub">kWp / inverter</div>
+                        </article>
+                        <article class="summary-kpi is-accent">
+                            <div class="summary-kpi-label">ประหยัดต่อปี</div>
+                            <div class="summary-kpi-value" id="summarySaveYear">—</div>
+                            <div class="summary-kpi-sub" id="summarySaveMonth">เฉลี่ยต่อเดือน —</div>
+                        </article>
+                        <article class="summary-kpi">
+                            <div class="summary-kpi-label">ผลิตได้ต่อปี</div>
+                            <div class="summary-kpi-value" id="summaryProdYear">—</div>
+                            <div class="summary-kpi-sub">พลังงานจากโซลาร์</div>
+                        </article>
+                        <article class="summary-kpi">
+                            <div class="summary-kpi-label">Self-consumption</div>
+                            <div class="summary-kpi-value" id="summarySelfCons">—</div>
+                            <div class="summary-kpi-sub">ใช้ไฟจากโซลาร์เอง</div>
+                        </article>
+                        <article class="summary-kpi">
+                            <div class="summary-kpi-label">ต้นทุนระบบโดยประมาณ</div>
+                            <div class="summary-kpi-value" id="summaryCost">—</div>
+                            <div class="summary-kpi-sub" id="summaryCostSub">รวมอุปกรณ์ตามที่ตั้งค่า</div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="summary-battery-verdict" id="summaryBatteryCard" hidden>
+                    <p class="summary-next-label">คำตัดสินแบตจากข้อมูลโรงงานจริง</p>
+      
