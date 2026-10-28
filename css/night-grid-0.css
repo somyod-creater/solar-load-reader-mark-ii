@@ -1,0 +1,614 @@
+/* =========================================================
+   Solar Load Reader — Mark II  ·  "Night Grid" theme
+   ---------------------------------------------------------
+   Dark control-room look: amber + teal accents, JetBrains Mono
+   numerals, Chakra Petch display labels, Noto Sans Thai body.
+   Design tokens → base → app bar → layout → components → print.
+   All element IDs / onclick hooks used by app.js are preserved;
+   chart colours are handled by chart-theme.js.
+   ========================================================= */
+
+/* ---------- 1. Design tokens ---------- */
+:root {
+    /* Typography */
+    --font: 'Noto Sans Thai', 'Segoe UI', Tahoma, system-ui, sans-serif;
+    --font-display: 'Chakra Petch', 'Noto Sans Thai', 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+    /* Surfaces */
+    --bg: #0E1116;
+    --surface: #161B22;
+    --surface-2: #11151C;
+    --surface-3: #1C222B;
+    --field: #0E1116;
+    --border: #262D37;
+    --border-strong: #30363D;
+
+    /* Text */
+    --text: #E6EDF3;
+    --text-2: #C9D1D9;
+    --text-3: #7D8590;
+
+    /* Accents */
+    --amber: #FFB020;
+    --amber-soft: rgba(255, 176, 32, 0.14);
+    --amber-border: rgba(255, 176, 32, 0.35);
+    --teal: #2DD4BF;
+    --teal-soft: #0F2A28;
+    --teal-border: #1F4B47;
+    --violet: #A78BFA;
+    --violet-soft: rgba(167, 139, 250, 0.12);
+    --violet-border: rgba(167, 139, 250, 0.35);
+    --sky: #58A6FF;
+    --sky-soft: rgba(88, 166, 255, 0.12);
+    --sky-border: rgba(88, 166, 255, 0.35);
+    --danger: #F87171;
+    --danger-soft: rgba(248, 113, 113, 0.12);
+    --danger-border: rgba(248, 113, 113, 0.35);
+    --success: #34D399;
+
+    /* Shape */
+    --radius-sm: 6px;
+    --radius: 8px;
+    --radius-lg: 10px;
+    --ring: 0 0 0 3px rgba(255, 176, 32, 0.25);
+
+    /* Layout */
+    --content-max: 1480px;
+    --gutter: 24px;
+    --header-h: 56px;
+    --rail-w: 380px;
+}
+
+/* ---------- 2. Base ---------- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    color-scheme: dark;
+}
+
+body {
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+    margin: 0;
+    line-height: 1.3;
+}
+
+p {
+    margin: 0;
+}
+
+b,
+strong {
+    font-weight: 600;
+}
+
+small {
+    font-size: 11px;
+    color: var(--text-3);
+    font-weight: 500;
+}
+
+::selection {
+    background: rgba(255, 176, 32, 0.3);
+}
+
+/* Display labels: small caps in Chakra Petch */
+.eyebrow,
+.panel h4,
+.panel-section-title,
+.calculation-details h3,
+.metric-title,
+.source-toolbar-label {
+    font-family: var(--font-display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* ---------- 3. App bar ---------- */
+.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+}
+
+.app-header-inner {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+    min-height: var(--header-h);
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.brand-logo {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    display: grid;
+    place-items: center;
+    color: var(--amber);
+}
+
+.brand-logo svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.brand-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.brand-subtitle {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-3);
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+/* Tabs: underline style in the app bar */
+.tab-nav {
+    display: flex;
+    gap: 22px;
+    margin-left: 4px;
+}
+
+.tab-btn {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    width: auto;
+    padding: 0 2px;
+    background: transparent;
+    color: var(--text-3);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    transition: color .15s ease, border-color .15s ease;
+}
+
+.tab-btn:hover {
+    color: var(--text);
+    filter: none;
+}
+
+.tab-btn.active {
+    color: var(--amber);
+    font-weight: 600;
+    border-bottom-color: var(--amber);
+}
+
+.tab-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+.tab-btn .step {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-3);
+    margin-right: 7px;
+    pointer-events: none;
+}
+
+.tab-btn.active .step {
+    color: var(--amber);
+    opacity: .8;
+}
+
+/* ---------- 4. Page container ---------- */
+.container {
+    position: relative;
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: 20px var(--gutter) 40px;
+}
+
+/* Inactive pages stay laid out (full width, zero height, invisible) rather than
+   display:none, so Plotly charts created in a hidden tab already measure the
+   correct width and don't need a slow resize pass when the tab is opened. */
+.tab-page {
+    position: absolute;
+    left: var(--gutter);
+    right: var(--gutter);
+    top: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.tab-page.active {
+    position: static;
+    height: auto;
+    overflow: visible;
+    visibility: visible;
+    pointer-events: auto;
+    animation: fadeIn .18s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* Page head: title + subtitle, optional actions on the right */
+.page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.page-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+}
+
+.page-sub {
+    font-size: 12.5px;
+    color: var(--text-3);
+    margin-top: 2px;
+}
+
+.page-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Input wizard: 3-step guided path */
+.input-wizard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+
+.input-wizard-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.input-wizard-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.input-wizard-hint {
+    color: var(--text-3);
+    font-size: 12.5px;
+    margin-top: 2px;
+}
+
+.sample-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--amber-border);
+    background: var(--amber-soft);
+}
+
+.sample-cta.is-hidden {
+    display: none !important;
+}
+
+.sample-cta-title {
+    font-weight: 600;
+    font-size: 13.5px;
+    margin-bottom: 2px;
+}
+
+.sample-cta-sub {
+    font-size: 12.5px;
+    color: var(--text-2);
+}
+
+.wizard-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.wizard-step {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.wizard-step:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+.wizard-step.is-active {
+    border-color: var(--amber-border);
+    background: var(--amber-soft);
+    color: var(--text);
+}
+
+.wizard-step.is-done {
+    border-color: var(--teal-border);
+}
+
+.wizard-step-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--amber);
+    flex: 0 0 auto;
+}
+
+.wizard-step-label {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.action-bar-copy {
+    flex: 1 1 220px;
+    font-size: 12.5px;
+    color: var(--text-3);
+}
+
+.action-bar-copy strong {
+    color: var(--amber);
+}
+
+/* Wizard progressive disclosure */
+#tab-input.wizard-mode.wizard-step-1 [data-wizard-section="sizing"],
+#tab-input.wizard-mode.wizard-step-1 [data-wizard-section="run"] .action-bar-copy,
+#tab-input.wizard-mode.wizard-step-1 [data-wizard-only],
+#tab-input.wizard-mode.wizard-step-1 [data-wizard-run],
+#tab-input.wizard-mode.wizard-step-2 [data-wizard-section="upload"],
+#tab-input.wizard-mode.wizard-step-2 [data-wizard-only],
+#tab-input.wizard-mode.wizard-step-2 [data-wizard-run],
+#tab-input.wizard-mode.wizard-step-3 [data-wizard-section="upload"],
+#tab-input.wizard-mode.wizard-step-3 [data-wizard-section="sizing"],
+#tab-input.wizard-mode.wizard-step-3 [data-wizard-next] {
+    display: none !important;
+}
+
+#tab-input:not(.wizard-mode) [data-wizard-only],
+#tab-input:not(.wizard-mode) [data-wizard-next],
+#tab-input:not(.wizard-mode) .action-bar-copy {
+    display: none !important;
+}
+
+#tab-input.wizard-mode.wizard-step-3 .action-bar {
+    border-color: var(--amber-border);
+    background: var(--amber-soft);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+}
+
+@media (max-width: 720px) {
+    .wizard-steps {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Input Data tab: uploads | system & tariff | BESS */
+.input-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 16px;
+}
+
+.input-layout .panel-container {
+    display: contents; /* its two panels become grid columns 2 and 3 */
+}
+
+.finance-results {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+/* ---------- 5. Cards & panels ---------- */
+.panel,
+.calculation-details,
+.chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.panel {
+    padding: 16px;
+    min-width: 0;
+}
+
+.panel h4 {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel h4 .accent {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex: 0 0 6px;
+}
+
+.panel-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    margin: 14px 0 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.panel-head h4 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.panel-container,
+.upload-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.calculation-details {
+    padding: 16px 18px;
+    margin-top: 16px;
+}
+
+.calculation-details h3 {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.calculation-details ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.calculation-details li {
+    margin-bottom: 14px;
+    font-size: 14px;
+    color: var(--text-2);
+}
+
+.calc-math {
+    display: block;
+    font-family: var(--font-mono);
+    background: var(--surface-2);
+    padding: 8px 12px;
+    margin-top: 6px;
+    border-left: 3px solid var(--amber);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--amber);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.legend-note {
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.7;
+    margin-top: 12px;
+}
+
+.chip {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--teal);
+    background: var(--teal-soft);
+    border: 1px solid var(--teal-border);
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0;
+    text-transform: none;
+}
