@@ -1,0 +1,637 @@
+
+/* ---------- 8b. Summary tab (หลังกด Run) ---------- */
+.summary-empty {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+}
+
+.summary-empty-card {
+    max-width: 420px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 24px;
+}
+
+.summary-empty-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+.summary-empty-sub {
+    color: var(--text-3);
+    font-size: 13px;
+    margin-bottom: 18px;
+}
+
+.summary-ready[hidden],
+.summary-empty[hidden],
+#summaryActions[hidden] {
+    display: none !important;
+}
+
+.summary-hero {
+    background:
+        radial-gradient(1200px 280px at 10% -10%, rgba(255, 176, 32, 0.14), transparent 55%),
+        radial-gradient(900px 240px at 90% 0%, rgba(45, 212, 191, 0.10), transparent 50%),
+        var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 22px 18px;
+    margin-bottom: 16px;
+}
+
+.summary-hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.summary-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--amber);
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    margin-bottom: 8px;
+}
+
+.summary-headline {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 6px;
+}
+
+.summary-lede {
+    color: var(--text-2);
+    font-size: 13.5px;
+    max-width: 56ch;
+}
+
+.summary-payback-pill {
+    min-width: 160px;
+    background: var(--surface-2);
+    border: 1px solid var(--teal-border);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+    text-align: right;
+}
+
+.summary-payback-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 4px;
+}
+
+.summary-payback-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--teal);
+}
+
+.summary-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.summary-kpi {
+    background: rgba(14, 17, 22, 0.55);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    min-width: 0;
+}
+
+.summary-kpi.is-accent {
+    border-color: var(--amber-border);
+    background: var(--amber-soft);
+}
+
+.summary-kpi-label {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 6px;
+}
+
+.summary-kpi-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.summary-kpi-sub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: var(--text-3);
+}
+
+.summary-battery-verdict {
+    margin-bottom: 16px;
+}
+
+.summary-battery-verdict[hidden] {
+    display: none !important;
+}
+
+.battery-verdict-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+}
+
+.battery-verdict-card.is-yes {
+    border-color: var(--teal-border);
+    background: linear-gradient(135deg, rgba(45, 212, 191, 0.10), transparent 55%), var(--surface);
+}
+
+.battery-verdict-card.is-maybe {
+    border-color: var(--amber-border);
+    background: linear-gradient(135deg, rgba(255, 176, 32, 0.10), transparent 55%), var(--surface);
+}
+
+.battery-verdict-card.is-no {
+    border-color: var(--danger-border);
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.08), transparent 55%), var(--surface);
+}
+
+.battery-verdict-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.battery-verdict-lede {
+    color: var(--text-2);
+    font-size: 13.5px;
+    max-width: 62ch;
+}
+
+.battery-verdict-meta {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text-3);
+}
+
+.summary-proposal-meta {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+}
+
+.proposal-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.proposal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+.proposal-field-wide {
+    grid-column: 1 / -1;
+}
+
+.proposal-field input {
+    width: 100%;
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+    padding: 9px 11px;
+}
+
+.proposal-field input:focus {
+    outline: none;
+    border-color: var(--amber-border);
+    box-shadow: var(--ring);
+}
+
+.summary-next {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+}
+
+.summary-next-label {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+}
+
+.summary-next-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 720px) {
+    .summary-hero {
+        padding: 16px;
+    }
+
+    .summary-payback-pill {
+        width: 100%;
+        text-align: left;
+    }
+
+    .summary-headline {
+        font-size: 18px;
+    }
+}
+
+/* ---------- 9. Metric tiles ---------- */
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    text-align: left;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.metric-title {
+    font-size: 10.5px;
+    color: var(--text-3);
+    font-weight: 500;
+}
+
+.metric-value {
+    font-family: var(--font-mono);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+/* app.js paints a few plant-report values in a navy that vanishes on dark */
+.metric-value[style*="2c3e50"] {
+    color: var(--text-2) !important;
+}
+
+/* Monthly savings breakdown */
+.savings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.savings-card {
+    background: var(--surface-2);
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.savings-card .label {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-bottom: 4px;
+}
+
+.savings-card .value {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.savings-card .sub {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 2px;
+}
+
+.savings-card.is-total {
+    background: var(--teal-soft);
+    border-color: var(--teal-border);
+}
+
+.savings-card.is-total .label {
+    color: var(--teal);
+    font-weight: 600;
+}
+
+.savings-card.is-total .value {
+    font-size: 19px;
+    color: var(--teal);
+}
+
+.savings-card.is-total .sub {
+    color: var(--teal);
+    opacity: .8;
+}
+
+/* ---------- 10. Tables ---------- */
+.pvsyst-table-container {
+    overflow-x: auto;
+}
+
+table.pvsyst-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+table.pvsyst-table th,
+table.pvsyst-table td {
+    border-bottom: 1px solid var(--surface-3);
+    padding: 8px 10px;
+}
+
+table.pvsyst-table th {
+    font-family: var(--font-display);
+    background: transparent;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-3);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+}
+
+table.pvsyst-table th small {
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--font-mono);
+}
+
+table.pvsyst-table td {
+    font-family: var(--font-mono);
+    color: var(--text);
+}
+
+table.pvsyst-table td:first-child {
+    font-family: var(--font);
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+table.pvsyst-table tbody tr:hover {
+    background: var(--surface-2);
+}
+
+table.pvsyst-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+table.pvsyst-table tr.total-row {
+    font-weight: 700;
+    background: var(--surface-2);
+}
+
+table.pvsyst-table tr.total-row td {
+    color: var(--amber);
+}
+
+table.pvsyst-table tr.total-row td:first-child {
+    color: var(--text);
+}
+
+/* ---------- 11. Charts ---------- */
+.chart-card {
+    padding: 8px 10px 10px;
+    margin-bottom: 16px;
+}
+
+#chart1,
+#chart2,
+#chart3,
+#chart4,
+#chart5,
+#chart6,
+#chart7 {
+    width: 100%;
+    height: 500px;
+}
+
+.plant-chart {
+    width: 100%;
+    height: 450px;
+    margin-top: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.chart-caption {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 14px;
+    margin: 8px 4px 2px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    line-height: 1.65;
+}
+
+.chart-caption b {
+    color: var(--text);
+}
+
+.chart-caption .tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #fff;
+    margin-right: 2px;
+}
+
+/* Raw plot tab */
+.plot-layout {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.plot-chart {
+    width: 100%;
+    height: 620px;
+}
+
+.plot-series-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.plot-series-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+.plot-series-item:hover {
+    background: var(--surface-2);
+}
+
+.plot-series-item input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex: 0 0 15px;
+}
+
+.plot-series-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex: 0 0 10px;
+}
+
+.plot-series-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+    .plot-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---------- 12. Alerts ---------- */
+.alert {
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.alert-warn {
+    background: var(--amber-soft);
+    border-color: var(--amber-border);
+    color: #FCD48A;
+}
+
+/* ---------- 13. Responsive ---------- */
+
+@media (max-width: 900px) {
+    :root {
+        --gutter: 16px;
+    }
+
+    .app-header-inner {
+        flex-wrap: wrap;
+        align-items: center;
+        padding-top: 10px;
+        gap: 8px 20px;
+    }
+
+    .tab-nav {
+        width: 100%;
+        margin: 0;
+        gap: 0;
+    }
+
+    .tab-btn {
+        flex: 1;
+        padding: 10px 4px;
+        text-align: center;
+    }
+
+    #chart1,
+    #chart2,
+    #chart3,
+    #chart4,
+    #chart5,
+    #chart6,
+    #chart7,
+    .plant-chart {
+        height: 400px;
+    }
+}
+
+@media (max-width: 560px) {
+    .brand-subtitle {
+        display: none;
+    }
+
+    .control-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    input,
+    select {
+        width: 100%;
+    }
+
+    .inline-input {
+        width: 100%;
+    }
+
+    .inline-input input {
+        flex: 1;
+    }
+
+    .action-bar {
+        grid-template-columns: 1fr;
+    }
+}
