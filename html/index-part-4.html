@@ -1,0 +1,218 @@
+              <div class="battery-verdict-card" id="summaryBatteryVerdict">
+                        <div class="battery-verdict-title" id="summaryBatteryTitle">—</div>
+                        <p class="battery-verdict-lede" id="summaryBatteryLede">—</p>
+                        <div class="battery-verdict-meta" id="summaryBatteryMeta">—</div>
+                        <div class="summary-next-actions" style="margin-top:12px;">
+                            <button type="button" class="btn-secondary" onclick="switchTab('tab-load', event)">ดูรายละเอียดวิเคราะห์แบต</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="summary-proposal-meta">
+                    <p class="summary-next-label">ข้อมูลบนหน้าข้อเสนอ (ส่งลูกค้า)</p>
+                    <div class="proposal-fields">
+                        <label class="proposal-field">
+                            <span>ชื่อโครงการ</span>
+                            <input type="text" id="proposalProjectName" placeholder="เช่น โรงงาน ABC — Rooftop Solar">
+                        </label>
+                        <label class="proposal-field">
+                            <span>ชื่อลูกค้า</span>
+                            <input type="text" id="proposalClientName" placeholder="เช่น บริษัท ABC จำกัด">
+                        </label>
+                        <label class="proposal-field">
+                            <span>เตรียมโดย</span>
+                            <input type="text" id="proposalPreparedBy" placeholder="ชื่อเซลล์ / วิศวกร">
+                        </label>
+                        <label class="proposal-field proposal-field-wide">
+                            <span>หมายเหตุถึงลูกค้า (ถ้ามี)</span>
+                            <input type="text" id="proposalNote" placeholder="เช่น ยังไม่รวมค่าโครงหลังคา / รอสำรวจหน้างาน">
+                        </label>
+                    </div>
+                </section>
+
+                <section class="summary-next">
+                    <p class="summary-next-label">ทำต่อจากตรงนี้</p>
+                    <div class="summary-next-actions">
+                        <button type="button" class="btn-primary" onclick="exportProposal()">Export ข้อเสนอ (HTML + พิมพ์ PDF)</button>
+                        <button type="button" class="btn-secondary" onclick="switchTab('tab-load', event)">ดูกราฟ Load &amp; Solar</button>
+                        <button type="button" class="btn-ghost" onclick="exportPage()">Export แอปแบบโต้ตอบ</button>
+                        <button type="button" class="btn-ghost" onclick="switchTab('tab-finance', event)">เปิดตาราง Finance เต็ม</button>
+                        <button type="button" class="btn-ghost" onclick="switchTab('tab-input', event)">แก้ค่า Input</button>
+                    </div>
+                </section>
+            </div>
+        </div><!-- end tab-summary -->
+
+        <!-- Tab 4: Finance -->
+        <div id="tab-finance" class="tab-page">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">Finance</h2>
+                    <p class="page-sub">ผลการวิเคราะห์ความคุ้มค่า · Solar only เทียบ Solar + BESS</p>
+                </div>
+                <div class="page-actions">
+                    <button type="button" class="btn-secondary" onclick="exportProposal()">Export ข้อเสนอ</button>
+                    <button id="exportBtn" class="btn-ghost" onclick="exportPage()">Export แอปแบบโต้ตอบ</button>
+                    <button id="printBtn" class="btn-ghost" onclick="window.print()">พิมพ์ Finance</button>
+                </div>
+            </div>
+
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-title">Production Energy / Year</div>
+                    <div class="metric-value" id="prodYear">0 kWh</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Energy Saving / Month</div>
+                    <div class="metric-value" id="saveMonth">0 ฿</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Total Revenue / Year</div>
+                    <div class="metric-value" id="saveYear">0 ฿</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Self-Consumption Rate</div>
+                    <div class="metric-value" id="selfCons">0%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Payback Period</div>
+                    <div class="metric-value" id="payback">0 ปี 0 เดือน</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Carbon Credit (CO2)</div>
+                    <div class="metric-value" id="carbon">0 Tons/Year</div>
+                </div>
+            </div>
+
+            <!-- Scenario Comparison Table -->
+            <div class="calculation-details">
+                <h3>Solar only vs Solar + BESS <span class="chip">BESS scenario</span></h3>
+                <div class="pvsyst-table-container">
+                    <table class="pvsyst-table" id="comparisonTable">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Solar Only</th>
+                                <th>Solar + BESS</th>
+                                <th>Difference</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>System Cost (THB)</td>
+                                <td id="compCostNoBat">-</td>
+                                <td id="compCostBat">-</td>
+                                <td id="compCostDiff">-</td>
+                            </tr>
+                            <tr>
+                                <td>Self-Consumed Energy (kWh/Month)</td>
+                                <td id="compSelfNoBat">-</td>
+                                <td id="compSelfBat">-</td>
+                                <td id="compSelfDiff">-</td>
+                            </tr>
+                            <tr>
+                                <td>Zero-Export Wasted Energy (kWh/Month)</td>
+                                <td id="compWasteNoBat">-</td>
+                                <td id="compWasteBat">-</td>
+                                <td id="compWasteDiff">-</td>
+                            </tr>
+                            <tr>
+                                <td>Peak Demand / Max Grid Draw (kW)</td>
+                                <td id="compPeakNoBat">-</td>
+                                <td id="compPeakBat">-</td>
+                                <td id="compPeakDiff">-</td>
+                            </tr>
+                            <tr>
+                                <td>Total Savings / Revenue (THB/Month)</td>
+                                <td id="compRevNoBat">-</td>
+                                <td id="compRevBat">-</td>
+                                <td id="compRevDiff">-</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>Payback Period (Years)</td>
+                                <td id="compPaybackNoBat">-</td>
+                                <td id="compPaybackBat">-</td>
+                                <td id="compPaybackDiff">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PVSyst Balances Table -->
+            <div class="calculation-details">
+                <h3>Balances and main results <span class="chip">PVSyst-style</span></h3>
+                <div class="pvsyst-table-container">
+                    <table class="pvsyst-table" id="pvsystTable">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>GlobInc<br><small>kWh/m²</small></th>
+                                <th>T_Amb<br><small>°C</small></th>
+                                <th>EArray<br><small>MWh</small></th>
+                                <th>E_Grid<br><small>MWh</small></th>
+                                <th>PR<br><small>ratio</small></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Generated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <p class="legend-note">
+                    <b>Legends:</b><br>
+                    GlobInc: Global incident irradiation in coll. plane (from PVGIS)<br>
+                    T_Amb: Ambient Temperature (from PVGIS)<br>
+                    EArray: Effective energy at the output of the array (Calculated via PR before clipping)<br>
+                    E_Grid: Energy injected into grid (Calculated with Clipping/Inverter limit)<br>
+                    PR: Performance Ratio
+                </p>
+            </div>
+
+            <div class="calculation-details">
+                <h3>Monthly savings breakdown <span class="chip">฿ / เดือน</span></h3>
+                <div class="savings-grid">
+                    <div class="savings-card">
+                        <div class="label">☀️ ผลประหยัดจาก Solar โดยตรง</div>
+                        <div id="monthlySolarDirect" class="value" style="color: #58A6FF;">฿0 / เดือน</div>
+                        <div id="monthlySolarDirectUnit" class="sub">0 kWh/เดือน</div>
+                    </div>
+                    <div class="savings-card">
+                        <div class="label">🔋 ผลประหยัดจาก BESS Arbitrage</div>
+                        <div id="monthlyBessArbitrage" class="value" style="color: #A78BFA;">฿0 / เดือน</div>
+                        <div id="monthlyBessUnit" class="sub">จ่ายกะกลางวัน vs ชาร์จกะดึก</div>
+                    </div>
+                    <div class="savings-card">
+                        <div class="label">📉 ผลประหยัด Peak Demand Charge</div>
+                        <div id="monthlyDemandSaving" class="value" style="color: #FB923C;">฿0 / เดือน</div>
+                        <div id="monthlyDemandKw" class="sub">ลด Peak ได้ 0.0 kW</div>
+                    </div>
+                    <div class="savings-card is-total">
+                        <div class="label">✨ ผลประหยัดรวมเฉลี่ยต่อเดือน</div>
+                        <div id="monthlyTotalSaving" class="value">฿0 / เดือน</div>
+                        <div id="monthlyAnnualProjection" class="sub">รวมทั้งปี: ฿0 / ปี</div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end tab-finance -->
+
+        <!-- Tab 4: Plant Report -->
+        <div id="tab-plant" class="tab-page">
+            <div id="plant-status" class="alert alert-warn">
+                ยังไม่มีข้อมูล Plant Report — กรุณาอัพโหลดไฟล์ Plant Report Excel ในแท็บ <b>Input Data</b>
+                เพื่อดูกราฟในหน้านี้
+            </div>
+            <div id="plant-metrics" class="metrics" style="display:none;"></div>
+            <div id="plant-chart-energy" class="plant-chart" style="display:none;"></div>
+            <div id="plant-chart-solar" class="plant-chart" style="display:none;"></div>
+            <div id="plant-chart-grid" class="plant-chart" style="display:none;"></div>
+            <div id="plant-chart-temp" class="plant-chart" style="display:none;"></div>
+            <div id="plant-chart-finance" class="plant-chart" style="display:none;"></div>
+            <div id="plant-chart-bess" class="plant-chart" style="display:none;"></div>
+        </div><!-- end tab-plant -->
+
+        <!-- Tab 5: raw plot - deliberately isolated from every calculation -->
+        <div id="tab-plot" class="tab-page">
+            <div class="page-head">
+     
