@@ -1,0 +1,159 @@
+/span>
+                    </button>
+                </div>
+            </section>
+
+            <div class="input-layout">
+            <!-- Column 1: uploads -->
+            <div class="upload-grid" data-wizard-section="upload">
+                <!-- Excel Load Upload Panel -->
+                <div class="panel">
+                    <h4><span class="accent" style="background: #58A6FF;"></span>Load profile (Excel)</h4>
+                    <div class="upload-body">
+                        <div id="dropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path><path d="M8 13h8M8 17h5"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์ Excel (.xlsx) มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
+                            <p class="dropzone-sub">รายงานโหลดหน่วย kW / kWh · รายชั่วโมง หรือ 15 นาที · อัพโหลดทีละหลายไฟล์ได้</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('fileInput').click();">📁 คลิกเลือกไฟล์ Excel</button>
+                        </div>
+                        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
+                        <div>
+                            <div class="status-head">
+                                <p>สถานะโหลด (Load Status):</p>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                    <button type="button" class="btn-sm btn-bess" id="btnLoadHouseholdSample" onclick="loadHouseholdSample({ run: true })">ใส่ตัวอย่างบ้าน 1 เดือน</button>
+                                    <button type="button" class="btn-sm btn-danger-outline" onclick="clearLoadData()">ล้างข้อมูล</button>
+                                </div>
+                            </div>
+                            <div id="uploadStatus" class="status-box is-warn">
+                                ⚠️ ยังไม่ได้อัพโหลดข้อมูลโหลด โปรดอัพโหลดไฟล์ Excel เพื่อแสดงกราฟวิเคราะห์และคำนวณความคุ้มค่า
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current (Amp) load file - separate from the Excel kW import -->
+                <div class="panel">
+                    <h4><span class="accent" style="background: #A78BFA;"></span>ไฟล์กระแสรายเฟส (Amp)</h4>
+                    <div class="upload-body">
+                        <div id="currentDropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4.09 12.97a1 1 0 0 0 .77 1.63h6.14l-1 7.4 8.9-10.97a1 1 0 0 0-.77-1.63h-6.14z"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์กระแส (.csv / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p class="dropzone-sub">กระแสรายเฟส I1 / I2 / I3 ระบบจะแปลงเป็น kW ให้ · ไฟล์ที่เป็น kW อยู่แล้วใส่ช่องนี้ได้เหมือนกัน · อัพโหลดทีละหลายไฟล์ได้</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('currentFileInput').click();">⚡ คลิกเลือกไฟล์กระแส</button>
+                        </div>
+                        <input type="file" id="currentFileInput" multiple accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <div>
+                            <div id="currentStatus" class="status-box">ยังไม่ได้นำเข้าไฟล์กระแส</div>
+                        </div>
+
+                        <div>
+                            <div class="panel-section-title">ค่าสำหรับแปลง Amp → kW</div>
+                            <p class="dropzone-sub" style="text-align: left; margin: 0 0 6px;">
+                                P = &radic;3 &times; V &times; I<sub>เฉลี่ย</sub> &times; PF · แก้ค่าแล้วคำนวณใหม่ทันที ไม่ต้องอัพโหลดซ้ำ
+                            </p>
+                            <div class="control-group">
+                                <label for="sysVoltageInput">แรงดันระบบ (V)<span class="hint">Line-to-line · 3 เฟส 4 สาย ทั่วไป = 400</span></label>
+                                <input type="number" id="sysVoltageInput" value="400" min="1" step="10" onchange="reconvertAmpData()">
+                            </div>
+                            <div class="control-group">
+                                <label for="powerFactorInput">Power Factor<span class="hint">ไม่ทราบค่าให้ใช้ 0.85</span></label>
+                                <input type="number" id="powerFactorInput" value="0.85" min="0.1" max="1" step="0.01" onchange="reconvertAmpData()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PVSyst Solar Simulation Upload Panel -->
+                <div class="panel">
+                    <div class="panel-head">
+                        <h4><span class="accent"></span>PVSyst simulation (E_Grid)</h4>
+                        <span id="pvsystSourceBadge" class="pill" style="display:none;">Active</span>
+                    </div>
+                    <div class="upload-body">
+                        <div id="pvsystDropzone" class="dropzone">
+                            <span class="dropzone-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></span>
+                            <p class="dropzone-title">ลากไฟล์ PVSyst (.csv / .txt / .xlsx) หรือคลิกเลือกไฟล์</p>
+                            <p class="dropzone-sub">ดึงข้อมูลการผลิต <b>E_Grid (kW)</b> รายชั่วโมงจาก Simulation จริง</p>
+                            <button type="button" class="btn-browse-file" onclick="document.getElementById('pvsystFileInput').click();">☀️ คลิกเลือกไฟล์ PVSyst</button>
+                        </div>
+                        <input type="file" id="pvsystFileInput" accept=".csv,.txt,.xlsx,.xls" style="display: none;">
+                        <div>
+                            <!-- background/color/border are toggled by app.js (updatePVSystUI) -->
+                            <div id="pvsystStatus" class="status-box"
+                                style="background: #fef9c3;">
+                                ℹ️ ยังไม่ได้นำเข้าไฟล์ PVSyst (ระบบกำลังใช้ข้อมูลแสง PVGIS รายชั่วโมง)
+                            </div>
+                            <div id="pvsystInfoBox" class="info-box">
+                                <div class="info-box-head">
+                                    <strong>ข้อมูล PVSyst Simulation:</strong>
+                                    <button type="button" class="btn-sm btn-danger-outline" onclick="clearPVSystData()">ล้างข้อมูล</button>
+                                </div>
+                                <div id="pvsystMetaTags" style="margin-bottom: 6px;"></div>
+                                <div class="info-grid">
+                                    <div>⚡ Peak E_Grid: <b id="pvsystPeakKw" style="color: #ea580c;">-</b> kW</div>
+                                    <div>🔋 Annual Total: <b id="pvsystAnnualMwh" style="color: #059669;">-</b> MWh</div>
+                                    <div>📅 Data Hours: <b id="pvsystTotalHours">-</b> ชม.</div>
+                                    <div>🌤️ Avg Daily: <b id="pvsystAvgDaily">-</b> kWh/วัน</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-container" data-wizard-section="sizing">
+                <!-- System & Financial -->
+                <div class="panel">
+                    <h4><span class="accent"></span>System sizing &amp; cost</h4>
+                    <div class="control-group source-control" id="solarSourceControlGroup" style="display:none;">
+                        <label>แหล่งข้อมูล Solar บนกราฟ & คำนวณ:</label>
+                        <div class="toggle-group">
+                            <button type="button" id="btnUseFormula" class="source-toggle-btn active" onclick="setSolarSource('formula')">สูตรคำนวณ</button>
+                            <button type="button" id="btnUsePVSyst" class="source-toggle-btn" onclick="setSolarSource('pvsyst')">PVSyst (E_Grid)</button>
+                            <button type="button" id="btnUseCompare" class="source-toggle-btn" onclick="setSolarSource('compare')">เปรียบเทียบ</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Inverter Type:</label>
+                        <select id="inverterType" onchange="toggleInverterType()">
+                            <option value="on_grid">On-grid Inverter</option>
+                            <option value="hybrid" selected>Hybrid Inverter</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>System Size (kWp):</label>
+                        <input type="number" id="kwpInput" value="1000" min="0" step="50">
+                    </div>
+                    <div class="control-group">
+                        <label>Inverter Limit (kW):</label>
+                        <input type="number" id="invInput" value="500" min="0" step="50">
+                    </div>
+                    <div class="control-group">
+                        <label for="solarPeakRatioInput">Peak Ratio (% ของ kWp)<span class="hint">กำลังสูงสุดตอนเที่ยง · ทั่วไป 80–90% · กำหนดว่าจะชน Inverter Limit เมื่อไหร่</span></label>
+                        <input type="number" id="solarPeakRatioInput" value="85" min="35" max="95" step="1" onchange="updateDashboard()">
+                    </div>
+                    <div class="control-group">
+                        <label for="solarPshInput">PSH (ชม./วัน)<span class="hint">ชั่วโมงแดดเต็มกำลังสุทธิ · กำหนดพลังงานต่อวัน = kWp × PSH</span></label>
+                        <input type="number" id="solarPshInput" value="4" min="1" max="8" step="0.1" onchange="updateDashboard()">
+                    </div>
+                    <div class="control-group">
+                        <label>Project Cost (Baht/Wp):</label>
+                        <input type="number" id="costInput" value="25" min="0" step="0.5">
+                    </div>
+                    <div class="panel-section-title">Tariff · PEA</div>
+                    <div class="control-group stack">
+                        <label>ประเภทผู้ใช้ไฟฟ้า (Tariff Category):</label>
+                        <select id="tariffProfile" class="select-full" onchange="onTariffProfileChange()">
+                            <optgroup label="🏢 กิจการ / อุตสาหกรรม (Commercial & Industrial)">
+                                <option value="pea_3_2_2" selected>ประเภท 3.2.2 กิจการขนาดกลาง TOU (22–33 kV) [ยอดนิยม]
+                                </option>
+                                <option value="pea_3_2_3">ประเภท 3.2.3 กิจการขนาดกลาง TOU (&lt; 22 kV)</option>
+                                <option value="pea_3_2_1">ประเภท 3.2.1 กิจการขนาดกลาง TOU (&ge; 69 kV)</option>
+                                <option value="pea_4_2_2">ประเภท 4.2.2 กิจการขนาดใหญ่ TOU (22–33 kV)</option>
+                                <option value="pea_4_2_3">ประเภท 4.2.3 กิจการขนาดใหญ่ TOU (&lt; 22 kV)</option>
+                                <option value="pea_4_2_1">ประเภท 4.2.1 กิจการขนาดใหญ่ TOU (&ge; 69 kV)</option>
+                                <option value="pea_5_1_2">ประเภท 5.1.2 โรงแรม/กิจการเฉพาะอย่าง TOU (22–33 kV)</option>
+                                <option value="pea_5_1_3">ประเภท 5.1.3 โรงแรม/กิจการเฉพาะอย่าง TOU (&lt; 22 kV)</option>
+                                <option value="pea_2_2_2">ประเภท 2.2.2 กิจการขนาดเล็ก TOU (&lt; 22 kV)</option>
+              
