@@ -1,1 +1,1 @@
-deleted-via-overwrite
+__LOAD_FROM__:/tmp/mcp-push/canary32.txt
