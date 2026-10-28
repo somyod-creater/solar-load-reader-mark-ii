@@ -9,18 +9,30 @@
 <body>
 <script>
 (async function () {
-  var TOTAL = 6;
-  var parts = [];
-  for (var i = 0; i < TOTAL; i++) {
-    var res = await fetch("html/index-part-" + i + ".html", { cache: "no-store" });
-    if (!res.ok) throw new Error("index part " + i + " HTTP " + res.status);
-    parts.push(await res.text());
+  async function text(url) {
+    var res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(url + " HTTP " + res.status);
+    return res.text();
   }
+  var cssParts = [];
+  for (var c = 0; c < 3; c++) {
+    cssParts.push(await text("css/styles-part-" + c + ".css"));
+  }
+  var css = cssParts.join("");
+  var htmlParts = [];
+  for (var i = 0; i < 6; i++) {
+    htmlParts.push(await text("html/index-part-" + i + ".html"));
+  }
+  var html = htmlParts.join("");
+  html = html.replace(
+    /<link[^>]*href=["']styles\.css[^"']*["'][^>]*>/i,
+    "<style>\n" + css + "\n</style>"
+  );
   document.open();
-  document.write(parts.join(""));
+  document.write(html);
   document.close();
 })().catch(function (e) {
-  document.body.textContent = "Failed to load index parts: " + e;
+  document.body.textContent = "Failed to load app shell: " + e;
   console.error(e);
 });
 </script>
