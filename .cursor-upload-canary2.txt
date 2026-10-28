@@ -1,1 +1,1 @@
-__LOAD_FROM__:/tmp/mcp-push/READY_csv.txt
+@/tmp/mcp-push/styles_CONTENT_ONLY.txt
