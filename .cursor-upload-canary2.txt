@@ -1,1 +1,1 @@
-@/tmp/mcp-push/styles_CONTENT_ONLY.txt
+args-file-test
