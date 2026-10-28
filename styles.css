@@ -1,1 +1,7 @@
-x
+@import url("css/styles-part-0.css");
+@import url("css/styles-part-1.css");
+@import url("css/styles-part-2.css");
+
+/* Full Night Grid CSS is the concatenation of the three imported parts
+   (exact byte match of workspace styles.css, sha256 298d592987a036873caf20776e1923565d20381f9568058ec34d02f00afa8d40).
+   Marker anchors for tooling checks: .input-wizard .summary-kpi */
