@@ -1,0 +1,624 @@
+ font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.7;
+    margin-top: 12px;
+}
+
+.chip {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--teal);
+    background: var(--teal-soft);
+    border: 1px solid var(--teal-border);
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* ---------- 6. Forms ---------- */
+.control-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 0;
+}
+
+label {
+    font-weight: 500;
+    color: var(--text-2);
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+
+label .hint {
+    display: block;
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 2px;
+}
+
+input,
+select {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--field);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0 10px;
+    height: 32px;
+    width: 130px;
+    flex: 0 0 auto;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+input[type="number"] {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+select {
+    width: auto;
+    min-width: 130px;
+    max-width: 100%;
+    cursor: pointer;
+    padding-right: 26px;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237D8590' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+select option,
+select optgroup {
+    background: var(--surface);
+    color: var(--text);
+}
+
+input:hover,
+select:hover {
+    border-color: #4B5563;
+}
+
+input:focus,
+select:focus {
+    border-color: var(--amber);
+    box-shadow: var(--ring);
+}
+
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    accent-color: var(--teal);
+    cursor: pointer;
+}
+
+.select-full {
+    width: 100%;
+}
+
+.control-group.stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.info-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--sky);
+    background: var(--sky-soft);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--sky-border);
+    line-height: 1.5;
+}
+
+.toggle-row {
+    align-items: flex-start;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-top: 8px;
+}
+
+.toggle-row label {
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+.inline-input {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.inline-input input {
+    width: 80px;
+}
+
+/* ---------- 7. Buttons ---------- */
+button {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    line-height: 1.3;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+
+button:hover {
+    background: #222A34;
+    border-color: #4B5563;
+}
+
+button:active {
+    transform: translateY(1px);
+}
+
+button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+button:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 11.5px;
+}
+
+.btn-danger-outline {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--danger-border);
+}
+
+.btn-danger-outline:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger);
+}
+
+.btn-bess {
+    background: var(--teal);
+    color: #0E1116;
+    border-color: var(--teal);
+}
+
+.btn-bess:hover {
+    background: #5EEAD4;
+    border-color: #5EEAD4;
+}
+
+/* battery-mode buttons: background colour is toggled by app.js (setBatteryMode) */
+.mode-btn {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: #FFFFFF;
+    border-color: transparent;
+}
+
+.mode-btn:hover {
+    border-color: transparent;
+    filter: brightness(1.1);
+}
+
+/* Primary action bar */
+.action-bar {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 8px;
+}
+
+.action-bar button {
+    padding: 11px 16px;
+    font-size: 14px;
+    border-radius: var(--radius);
+}
+
+.btn-primary {
+    font-family: var(--font-display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--amber);
+    color: #0E1116;
+    border-color: var(--amber);
+}
+
+.btn-primary:hover {
+    background: #FFC24D;
+    border-color: #FFC24D;
+}
+
+.btn-secondary,
+.btn-ghost {
+    background: var(--surface);
+    color: var(--text-2);
+}
+
+/* Segmented controls (period / solar-source switches) */
+.chart-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.solar-source-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.source-toolbar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.time-segment {
+    display: inline-flex;
+    gap: 2px;
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+}
+
+.time-segment button {
+    width: auto;
+    margin: 0;
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 600;
+    transition: all .15s ease;
+}
+
+.time-segment button:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.time-segment button.active {
+    background: var(--border);
+    color: var(--text);
+}
+
+#solarSourceSegment button.active {
+    background: var(--sky-soft);
+    color: var(--sky);
+    box-shadow: inset 0 0 0 1px var(--sky-border);
+}
+
+#solarSourceSegment button#btnSourcePVSyst.active {
+    background: var(--amber-soft);
+    color: var(--amber);
+    box-shadow: inset 0 0 0 1px var(--amber-border);
+}
+
+#solarSourceSegment button#btnSourceCompare.active {
+    background: var(--violet-soft);
+    color: var(--violet);
+    box-shadow: inset 0 0 0 1px var(--violet-border);
+}
+
+.source-toggle-btn {
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid var(--border-strong);
+    background: var(--field);
+    color: var(--text-3);
+    border-radius: 5px;
+    transition: all .15s ease;
+}
+
+.source-toggle-btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.source-toggle-btn.active {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-color: var(--amber-border);
+}
+
+.source-control {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+}
+
+.source-control label {
+    font-size: 12px;
+    color: var(--amber);
+}
+
+.source-control .toggle-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* ---------- 8. Upload / dropzones ---------- */
+.dropzone {
+    width: 100%;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    text-align: center;
+    background: var(--field);
+    cursor: pointer;
+    transition: background .2s ease, border-color .2s ease;
+}
+
+.dropzone-icon {
+    display: block;
+    width: 28px;
+    height: 28px;
+    margin: 0 auto 8px;
+    color: var(--text-3);
+}
+
+.dropzone-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.dropzone-title {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 12.5px;
+}
+
+.dropzone-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    margin: 3px 0 10px;
+}
+
+.dropzone .btn-browse-file {
+    padding: 6px 14px;
+    font-size: 12px;
+}
+
+#dropzone:hover {
+    border-color: var(--sky);
+    background: var(--sky-soft);
+}
+
+#dropzone .dropzone-icon {
+    color: var(--sky);
+}
+
+#dropzone.dragover {
+    background: var(--sky-soft);
+    border-color: var(--sky);
+    border-style: solid;
+}
+
+#pvsystDropzone:hover {
+    border-color: var(--amber);
+    background: var(--amber-soft);
+}
+
+#pvsystDropzone .dropzone-icon {
+    color: var(--amber);
+}
+
+#pvsystDropzone.dragover {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+    border-style: solid;
+}
+
+.upload-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.status-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.status-head p {
+    font-weight: 600;
+    color: var(--text-3);
+    font-size: 11.5px;
+}
+
+.status-box {
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    line-height: 1.55;
+    color: var(--text-2);
+}
+
+.status-box.is-warn {
+    color: #FCA5A5;
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+}
+
+/* app.js repaints #pvsystStatus with light-mode inline colours; map them to dark tints */
+#pvsystStatus[style*="fef9c3"] {
+    background: var(--amber-soft) !important;
+    color: #FCD48A !important;
+    border-color: var(--amber-border) !important;
+}
+
+#pvsystStatus[style*="ecfdf5"] {
+    background: var(--teal-soft) !important;
+    color: var(--teal) !important;
+    border-color: var(--teal-border) !important;
+}
+
+.info-box {
+    display: none;
+    margin-top: 8px;
+    font-size: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+.info-box-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.info-box-head strong {
+    color: var(--amber);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-2);
+}
+
+.pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--teal-soft);
+    color: var(--teal);
+    border: 1px solid var(--teal-border);
+}
+
+.pvsyst-meta-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--amber-soft);
+    color: var(--amber);
+    border: 1px solid var(--amber-border);
+    margin: 2px 4px 2px 0;
+    font-weight: 500;
+}
+
+/* ---------- 8b. Summary tab (หลังกด Run) ---------- */
+.summary-empty {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+}
+
+.summary-empty-card {
+    max-width: 420px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 24px;
+}
+
+.summary-empty-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+.summary-empty-sub {
+    color: var(--text-3);
+    font-size: 13px;
+    margin-bottom: 18px;
+}
+
+.summary-ready[hidden],
+.summary-empty[hidden],
+#summaryActions[hidden] {
+    display: none !important;
+}
+
+.summary-hero {
+    background:
+        radial-gradient(1200px 280px at 10% -10%, rgba(255, 176, 32, 0.14), transparent 55%),
+        radial-gradient(900px 240px at 90% 0%, rgba(45, 212, 191, 0.10), transparent 50%),
+        var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 22px 18px;
+    margin-bottom: 16px;
+}
+
+.summary-hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.summary-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--amber);
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-border);
+    border-radius: 999px;
+    padding: 4px
