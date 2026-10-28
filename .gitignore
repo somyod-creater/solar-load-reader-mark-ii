@@ -1,5 +1,6 @@
-﻿_tmp_*.xlsx
+_tmp_*.xlsx
 *.xlsx
+!sample-data/*.xlsx
 .agents/
 .claude/
 .vscode/
