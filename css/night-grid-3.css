@@ -1,0 +1,99 @@
+
+/* ---------- 14. Print (force a light page) ---------- */
+@media print {
+    :root {
+        --bg: #fff;
+        --surface: #fff;
+        --surface-2: #f8fafc;
+        --surface-3: #f1f5f9;
+        --field: #fff;
+        --border: #d0d7de;
+        --border-strong: #cbd5e1;
+        --text: #0f172a;
+        --text-2: #334155;
+        --text-3: #64748b;
+        --amber: #b45309;
+        --amber-soft: #fef3c7;
+        --amber-border: #fcd34d;
+        --teal: #0f766e;
+        --teal-soft: #ccfbf1;
+        --teal-border: #99f6e4;
+    }
+
+    html {
+        color-scheme: light;
+    }
+
+    body {
+        background: #fff;
+    }
+
+    .app-header,
+    .tab-nav,
+    .panel-container,
+    .upload-grid,
+    .chart-toolbar,
+    .action-bar,
+    button {
+        display: none !important;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 0;
+    }
+
+    .panel,
+    .calculation-details,
+    .chart-card,
+    .metric-card {
+        border: 1px solid #ddd;
+        break-inside: avoid;
+    }
+
+    /* Plotly charts are drawn dark by chart-theme.js; print them light */
+    .js-plotly-plot .main-svg {
+        background: #fff !important;
+    }
+
+    .js-plotly-plot .bglayer rect {
+        fill: #fff !important;
+    }
+
+    .js-plotly-plot .gridlayer path {
+        stroke: #e5e7eb !important;
+    }
+
+    .js-plotly-plot .zerolinelayer path {
+        stroke: #9ca3af !important;
+    }
+
+    .js-plotly-plot text {
+        fill: #1f2937 !important;
+    }
+
+    #chart1,
+    #chart2,
+    #chart3,
+    #chart4,
+    #chart5,
+    #chart6,
+    #chart7 {
+        break-inside: avoid;
+        height: 400px;
+    }
+
+    .comparison-table-container,
+    .calculation-details,
+    .pvsyst-table-container {
+        break-inside: avoid;
+    }
+
+    /* Show all tabs content when printing */
+    .tab-page {
+        position: static !important;
+        height: auto !important;
+        overflow: visible !important;
+        visibility: visible !important;
+    }
+}
