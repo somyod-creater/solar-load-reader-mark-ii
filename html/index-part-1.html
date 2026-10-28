@@ -1,0 +1,177 @@
+ential -->
+                        <div
+                            style="background:rgba(255,255,255,0.06); border-radius:10px; padding:16px; border-left:4px solid #e74c3c;">
+                            <h4 style="margin:0 0 12px 0; color:#e74c3c; font-size:15px;">📈 Peak Shaving Potential</h4>
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Peak Grid Import</td>
+                                    <td id="ba-peak-grid"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Avg Grid Import</td>
+                                    <td id="ba-avg-grid"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Shavable Peak</td>
+                                    <td id="ba-shavable"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0; color:#8892b0;">Peak Hours (most frequent)</td>
+                                    <td id="ba-peak-hours"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <!-- Box 5: Battery Sizing Recommendation -->
+                        <div
+                            style="background:rgba(255,255,255,0.06); border-radius:10px; padding:16px; border-left:4px solid #3498db;">
+                            <h4 style="margin:0 0 12px 0; color:#3498db; font-size:15px;">🔋 Battery Sizing
+                                Recommendation</h4>
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Recommended Capacity</td>
+                                    <td id="ba-rec-capacity"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#3498db; font-size:16px;">
+                                        —</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Recommended Power</td>
+                                    <td id="ba-rec-power"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#3498db; font-size:16px;">
+                                        —</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">C-Rate</td>
+                                    <td id="ba-c-rate"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0; color:#8892b0;">Battery Type</td>
+                                    <td id="ba-battery-type"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <!-- Box 6: Financial Summary -->
+                        <div
+                            style="background:rgba(255,255,255,0.06); border-radius:10px; padding:16px; border-left:4px solid #e67e22;">
+                            <h4 style="margin:0 0 12px 0; color:#e67e22; font-size:15px;">💰 Financial Summary</h4>
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Saved Export (฿/month)</td>
+                                    <td id="ba-saved-export"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Demand Charge Saving (฿/month)</td>
+                                    <td id="ba-demand-saving"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#fff;">—</td>
+                                </tr>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <td style="padding:6px 0; color:#8892b0;">Total Saving (฿/year)</td>
+                                    <td id="ba-total-saving"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#2ecc71; font-size:16px;">
+                                        —</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 0; color:#8892b0;">Estimated Payback</td>
+                                    <td id="ba-payback"
+                                        style="padding:6px 0; text-align:right; font-weight:bold; color:#e67e22; font-size:16px;">
+                                        —</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <section class="chart-card">
+            <div id="chart7"></div>
+            <div class="chart-caption">
+                <b>Imported Net Load:</b> ใช้ <b>Import (kWh)</b> = โหลดคงเหลือปัจจุบัน (หลังหักโซลาร์ Phase 1
+                ที่ติดอยู่แล้ว) เป็นฐาน แล้วหักด้วย <b>Designed Solar Phase 2</b> ที่กำลังจะติดตั้ง → <b>Net Load =
+                    Import − Phase 2</b> คือโหลดที่ยังต้องซื้อจากกริดหลังติด Phase 2 (เส้น Consumption =
+                โหลดเดิมก่อนมีโซลาร์, Solar Phase 1 = Inverter Yield ปัจจุบัน)
+            </div>
+            </section>
+            <section class="chart-card">
+            <div id="chart3"></div>
+            <div class="chart-caption">
+                💡 <b>Solar Only (No Battery):</b> The <span class="tag" style="background:#ff6d00;">orange line</span>
+                represents the net power <b>still purchased from the grid</b>. The key issue is the <span class="tag"
+                    style="background:#e53935;">red area</span> at noon, which represents surplus solar generation that
+                is <b>curtailed/wasted</b> due to lack of storage. This illustrates why a battery system is beneficial.
+            </div>
+            </section>
+            <section class="chart-card">
+            <div id="chart4"></div>
+            <div class="chart-caption">
+                💡 <b>With BESS Battery:</b> The <span class="tag" style="background:#e91e63;">pink area</span> shows
+                the <b>peak demand shaved by the battery (Peak Shaving)</b>. The battery stores surplus midday solar
+                energy and discharges it during peak periods, flattening the net grid demand profile to reduce both
+                energy charges and Peak Demand charges (Demand Charge).
+            </div>
+            </section>
+            <section class="chart-card">
+            <div id="chart6"></div>
+            <div class="chart-caption">
+                💡 <b>Battery Operation:</b> The green area <span class="tag"
+                    style="background:#4caf50;">(Positive)</span> represents the battery <b>charging power</b>
+                (typically during midday when there is surplus solar). The pink area <span class="tag"
+                    style="background:#e91e63;">(Negative)</span> represents the battery <b>discharging power</b>
+                (evening, night, or peak hours). The purple line <span class="tag"
+                    style="background:#9c27b0;">(SOC)</span> shows the battery's <b>State of Charge (%)</b>.
+            </div>
+            </section>
+            <section class="chart-card">
+            <div id="chart5"></div>
+            <div class="chart-caption">
+                💡 <b>Comparison Summary:</b> Net grid power purchased comparing <span class="tag"
+                    style="background:#2196f3;">Solar Only</span> vs. <span class="tag"
+                    style="background:#4caf50;">Solar + Battery</span>. A <b>lower and flatter</b> green curve indicates
+                greater cost savings and more effective peak demand reduction.
+            </div>
+            </section>
+        </div>
+
+        <!-- Tab 1: Input Data -->
+        <div id="tab-input" class="tab-page active wizard-mode wizard-step-1">
+            <div class="page-head">
+                <div>
+                    <h2 class="page-title">Input Data</h2>
+                    <p class="page-sub">อัปโหลดข้อมูลโหลด ตั้งค่าระบบและอัตราค่าไฟ แล้วกด Run เพื่อดูสรุปผลที่หน้า Summary</p>
+                </div>
+            </div>
+
+            <section class="input-wizard" id="inputWizard" aria-label="เส้นทางเริ่มต้น 3 ขั้น">
+                <div class="input-wizard-top">
+                    <div>
+                        <p class="input-wizard-title">เริ่มแบบ 3 ขั้น</p>
+                        <p class="input-wizard-hint" id="wizardHint">ขั้นที่ 1 — อัปโหลดไฟล์โหลด (Excel kW หรือไฟล์กระแส Amp)</p>
+                    </div>
+                    <button type="button" class="btn-ghost" id="wizardToggleBtn" onclick="toggleWizardMode()">ดูทั้งหมด</button>
+                </div>
+                <div class="sample-cta" id="sampleCta">
+                    <div>
+                        <p class="sample-cta-title">ยังไม่มีไฟล์โหลด?</p>
+                        <p class="sample-cta-sub">กดปุ่มนี้เพื่อใส่โหลดบ้านเรือน 1 เดือน แล้วคำนวณ Summary ให้ทันที</p>
+                    </div>
+                    <button type="button" class="btn-primary" id="btnLoadHouseholdSampleTop" onclick="loadHouseholdSample({ run: true })">ใส่ตัวอย่างบ้าน 1 เดือน</button>
+                </div>
+                <div class="wizard-steps" role="tablist">
+                    <button type="button" class="wizard-step is-active" data-wizard-goto="1" onclick="setWizardStep(1)">
+                        <span class="wizard-step-num">1</span>
+                        <span class="wizard-step-label">อัปโหลดโหลด</span>
+                    </button>
+                    <button type="button" class="wizard-step" data-wizard-goto="2" onclick="setWizardStep(2)">
+                        <span class="wizard-step-num">2</span>
+                        <span class="wizard-step-label">ตั้งค่าระบบ</span>
+                    </button>
+                    <button type="button" class="wizard-step" data-wizard-goto="3" onclick="setWizardStep(3)">
+                        <span class="wizard-step-num">3</span>
+                        <span class="wizard-step-label">Run ดูผล
